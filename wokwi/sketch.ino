@@ -12,6 +12,22 @@
 #include <Wire.h>            // I2C communication library (needed for OLED)
 #include <Adafruit_GFX.h>    // Core graphics library (fonts, shapes) for OLED
 #include <Adafruit_SSD1306.h> // Driver library for SSD1306 OLED display
+#include <WiFi.h>            // ESP32 WiFi library (built-in, no install needed)
+#include <HTTPClient.h>      // ESP32 HTTP client for sending POST requests
+
+// --- WiFi Configuration (Wokwi provides a free simulated WiFi network) ---
+// "Wokwi-GUEST" is a built-in open network in all Wokwi simulations — no password needed.
+// Channel 6 is required for Wokwi's simulated WiFi to connect reliably.
+const char* WIFI_SSID     = "Wokwi-GUEST";
+const char* WIFI_PASSWORD = "";
+#define WIFI_CHANNEL 6
+
+// --- Railway Server URLs ---
+// DEPLOYMENT: After deploying to Railway, replace YOUR-RAILWAY-URL with your actual URL.
+// Example: https://smartroadhazard-production.up.railway.app
+// Leave as-is for Wokwi Serial-only mode (bridge.py stdin/demo will still work).
+const char* RAILWAY_URL = "https://YOUR-RAILWAY-URL.up.railway.app/api/hazards";
+const char* VEHICLE_URL = "https://YOUR-RAILWAY-URL.up.railway.app/api/vehicle";
 
 // --- OLED Display Configuration ---
 #define SCREEN_WIDTH 128     // OLED display width in pixels
@@ -56,6 +72,90 @@ float baseLng = 79.088200;   // Base longitude: Sitabuldi area, Nagpur
 float baseline = 20.0;               // Average distance on flat road (cm), set during calibration
 unsigned long lastDetectionTime = 0; // Timestamp (ms) of the last hazard detection
 bool calibrated = false;             // Flag: true once baseline calibration is complete
+
+// ============================================================
+// FUNCTION: connectWiFi()
+// Connects to Wokwi's free simulated WiFi network.
+// If connection fails after 20 attempts, falls back to Serial-only mode.
+// Serial.println() lines still fire regardless — bridge.py stdin still works.
+// ============================================================
+void connectWiFi() {
+  Serial.print("Connecting to WiFi");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
+
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");   // Print dot each 500ms to show progress
+    attempts++;
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
+  } else {
+    // Not fatal — Serial output still works for bridge.py stdin mode
+    Serial.println("\nWiFi failed — serial-only mode (bridge.py stdin still works)");
+  }
+}
+
+// ============================================================
+// FUNCTION: postToRailway(type, severity, lat, lng)
+// Sends a hazard detection as a JSON POST to the Railway server.
+// Only runs if WiFi is connected. Safe to call even if WiFi is down
+// (returns immediately without blocking).
+// severity = "" for speedbreakers (sends JSON null).
+// ============================================================
+void postToRailway(String type, String severity, float lat, float lng) {
+  // Skip silently if WiFi is not connected — Serial fallback handles it
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.begin(RAILWAY_URL);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);  // 5 second timeout — don't block the loop too long
+
+  // Build the JSON body.
+  // severity is null for speedbreakers (Flask API accepts null for that field).
+  String body;
+  if (severity == "") {
+    // Speedbreaker — no severity field
+    body = "{\"type\":\"" + type + "\","
+         + "\"severity\":null,"
+         + "\"lat\":"  + String(lat, 6) + ","
+         + "\"lng\":"  + String(lng, 6) + "}";
+  } else {
+    // Pothole — include severity
+    body = "{\"type\":\"" + type + "\","
+         + "\"severity\":\"" + severity + "\","
+         + "\"lat\":"  + String(lat, 6) + ","
+         + "\"lng\":"  + String(lng, 6) + "}";
+  }
+
+  int code = http.POST(body);
+  // Print HTTP response code so we can verify in Wokwi Serial Monitor
+  Serial.println("POST → HTTP " + String(code));
+  http.end();
+}
+
+// ============================================================
+// FUNCTION: postVehiclePosition(lat, lng)
+// Sends current GPS coordinates to /api/vehicle so the dashboard
+// can show the moving vehicle marker on the Leaflet map.
+// ============================================================
+void postVehiclePosition(float lat, float lng) {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.begin(VEHICLE_URL);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(3000);  // Shorter timeout — vehicle position is non-critical
+
+  String body = "{\"lat\":" + String(lat, 6)
+              + ",\"lng\":" + String(lng, 6)
+              + ",\"speed\":30}";
+  http.POST(body);  // Fire-and-forget — we don't need the response
+  http.end();
+}
 
 // ============================================================
 // FUNCTION: measureDistance()
@@ -202,6 +302,10 @@ void setup() {
   Serial.println("Smart Road Hazard Detection System");
   Serial.println("===================================");
 
+  // Connect to Wokwi's free simulated WiFi so we can POST to Railway
+  // Must be called AFTER Serial.begin() so WiFi status prints are visible
+  connectWiFi();
+
   // Configure HC-SR04 pins
   pinMode(TRIG_PIN, OUTPUT);       // TRIG is an OUTPUT: we send pulses out
   pinMode(ECHO_PIN, INPUT);        // ECHO is an INPUT:  we receive reflected pulses
@@ -294,6 +398,10 @@ void loop() {
                "Dist: " + String(currentDistance, 1) + "cm",  // Line 3: raw distance
                "Delta: +" + String(delta, 1) + "cm");         // Line 4: delta
 
+    // Also POST to Railway over WiFi (runs only if WiFi is connected)
+    postToRailway("pothole", "deep", lat, lng);
+    postVehiclePosition(lat, lng);
+
     lastDetectionTime = now;        // Record time of this detection (start cooldown)
 
   } else if (delta > MEDIUM_THRESHOLD && !inCooldown) {
@@ -310,6 +418,10 @@ void loop() {
                "SEVERITY: MEDIUM",
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
+
+    // Also POST to Railway over WiFi
+    postToRailway("pothole", "medium", lat, lng);
+    postVehiclePosition(lat, lng);
 
     lastDetectionTime = now;
 
@@ -328,6 +440,10 @@ void loop() {
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
 
+    // Also POST to Railway over WiFi
+    postToRailway("pothole", "shallow", lat, lng);
+    postVehiclePosition(lat, lng);
+
     lastDetectionTime = now;
 
   } else if (delta < SPEEDBREAKER_THRESHOLD && !inCooldown) {
@@ -345,6 +461,10 @@ void loop() {
                "RAISED SURFACE",
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: " + String(delta, 1) + "cm");  // delta is negative here
+
+    // Also POST to Railway over WiFi (severity="" → JSON null)
+    postToRailway("speedbreaker", "", lat, lng);
+    postVehiclePosition(lat, lng);
 
     lastDetectionTime = now;
 

@@ -4,6 +4,9 @@
  * Polls Flask API at localhost:5001 every 2 seconds
  */
 
+// DEPLOYMENT: Replace localhost:5001 with Railway URL after deploying
+// const API_BASE = 'https://YOUR-RAILWAY-URL.up.railway.app';
+// For local testing keep localhost:
 const API_BASE = 'http://localhost:5001';
 const POLL_INTERVAL_MS = 2000;
 
@@ -12,6 +15,9 @@ const markers = {};
 const knownHazardIds = new Set();
 
 let map;
+let vehicleMarker;
+let trailLine;
+const vehicleTrail = [];
 
 // ── Marker colours per severity / type ───────────────────────
 const COLORS = {
@@ -51,6 +57,27 @@ function initMap() {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
+  // ── Vehicle marker (🚗 emoji, rendered via divIcon) ──────────
+  const vehicleIcon = L.divIcon({
+    className: '',
+    html: '<div style="font-size:26px;transform:translate(-50%,-50%)">🚗</div>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+
+  vehicleMarker = L.marker([21.145800, 79.088200], {
+    icon: vehicleIcon,
+    zIndexOffset: 1000,  // Keep vehicle on top of hazard markers
+  }).addTo(map);
+
+  // ── Green dashed trail polyline ───────────────────────────────
+  trailLine = L.polyline([], {
+    color: '#00ff88',
+    weight: 2,
+    opacity: 0.5,
+    dashArray: '5, 8',
+  }).addTo(map);
+
   // Hide loading overlay once map is ready
   const overlay = document.getElementById('map-loading');
   if (overlay) overlay.style.display = 'none';
@@ -58,10 +85,39 @@ function initMap() {
   startPolling();
 }
 
+// ── Fetch vehicle position and move marker on map ─────────────
+async function fetchVehiclePosition() {
+  try {
+    const res = await fetch(`${API_BASE}/api/vehicle`);
+    if (!res.ok) return;
+    const v = await res.json();
+    const pos = [v.lat, v.lng];
+
+    vehicleMarker.setLatLng(pos);
+    vehicleMarker.bindPopup(
+      `<b>🚗 Vehicle</b><br/>` +
+      `Lat: ${Number(v.lat).toFixed(5)}<br/>` +
+      `Lng: ${Number(v.lng).toFixed(5)}<br/>` +
+      `Speed: ${v.speed || 30} km/h`
+    );
+
+    // Add position to trail; keep only last 15 points
+    vehicleTrail.push(pos);
+    if (vehicleTrail.length > 15) vehicleTrail.shift();
+    trailLine.setLatLngs(vehicleTrail);
+  } catch (e) {
+    // Vehicle endpoint not available yet — silently ignore
+  }
+}
+
 // ── Poll the API every 2 seconds ─────────────────────────────
 function startPolling() {
   fetchAndUpdateHazards(); // first call immediately
   setInterval(fetchAndUpdateHazards, POLL_INTERVAL_MS);
+
+  // Vehicle position polls every 1 second for smooth movement
+  fetchVehiclePosition();
+  setInterval(fetchVehiclePosition, 1000);
 }
 
 async function fetchAndUpdateHazards() {

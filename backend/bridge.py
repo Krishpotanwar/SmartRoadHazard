@@ -32,6 +32,9 @@ import requests
 # Configuration
 # ---------------------------------------------------------------------------
 
+# DEPLOYMENT: Replace localhost:5001 with Railway URL after deploying
+# API_URL = "https://YOUR-RAILWAY-URL.up.railway.app/api/hazards"
+# For local testing keep localhost:
 API_URL = "http://localhost:5001/api/hazards"
 
 # Simulated GPS waypoints along a real Nagpur city route.

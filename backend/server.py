@@ -11,6 +11,8 @@ Run:
 Server starts at http://localhost:5001
 """
 
+import os
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -151,6 +153,43 @@ def get_stats():
     return _json(stats)
 
 
+# ---------------------------------------------------------------------------
+# Vehicle position tracking (updated by ESP32 via WiFi POST)
+# ---------------------------------------------------------------------------
+
+vehicle_position = {
+    "lat": 21.145800,
+    "lng": 79.088200,
+    "speed": 0,
+    "timestamp": None,
+}
+
+
+@app.route("/api/vehicle", methods=["GET"])
+def get_vehicle():
+    """Return the last known vehicle position."""
+    return _json(vehicle_position)
+
+
+@app.route("/api/vehicle", methods=["POST"])
+def update_vehicle():
+    """Update vehicle position from ESP32 or bridge.
+
+    Expected JSON body:
+        { "lat": float, "lng": float, "speed": int (optional) }
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return _json({"success": False, "message": "No body"}, 400)
+    vehicle_position.update({
+        "lat":       body.get("lat",   vehicle_position["lat"]),
+        "lng":       body.get("lng",   vehicle_position["lng"]),
+        "speed":     body.get("speed", 30),
+        "timestamp": body.get("timestamp", ""),
+    })
+    return _json({"success": True})
+
+
 @app.route("/api/hazards", methods=["DELETE"])
 def clear_hazards():
     """Delete all hazard records from the database.
@@ -166,8 +205,11 @@ def clear_hazards():
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    # Railway sets PORT automatically; fall back to 5001 for local dev
+    port = int(os.environ.get("PORT", 5001))
+    debug = os.environ.get("FLASK_ENV") == "development"
     print("=" * 50)
     print("  SmartRoadHazard API Server")
-    print("  http://localhost:5001")
+    print(f"  http://localhost:{port}")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=debug)
