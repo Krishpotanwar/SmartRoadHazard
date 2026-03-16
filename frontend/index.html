@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Smart Road Hazard Detection System — Live map dashboard for Nagpur" />
-  <title>Smart Road Hazard Detection System</title>
+  <title>SmartRoadHazard — Nagpur</title>
 
   <!-- Leaflet CSS — free map library, no API key needed -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -35,6 +35,16 @@
     <aside id="sidebar">
 
       <div id="connection-status">● Connecting…</div>
+      <div id="mode-indicator" style="
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+        background: #1a2744;
+        border: 1px solid #233060;
+        color: #7788bb;
+        text-align: center;
+        margin-top: -8px;
+      ">⏳ Loading…</div>
 
       <!-- Stats -->
       <section id="stats-section">
@@ -99,6 +109,10 @@
 <div id="alert-bar" role="alert">
   <span id="alert-message"></span>
 </div>
+
+<!-- Firebase SDK (compat version — works without bundler) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <!-- Leaflet JS — free, no API key -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

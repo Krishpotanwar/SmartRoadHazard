@@ -17,12 +17,14 @@ Controls:
     q → Quit
 """
 
+import os
 import sys
 import time
 import random
 import requests
 
-API_URL = "http://localhost:5001/api/hazards"
+_BASE = os.environ.get("SMARTROAD_API", "http://localhost:5001")
+API_URL = f"{_BASE}/api/hazards"
 BASELINE = 20.0  # Normal road distance in cm (same as sketch.ino)
 
 # Nagpur base coordinates — same as sketch.ino
@@ -91,7 +93,7 @@ def print_menu():
     """Print the key controls."""
     print("\n" + "═"*50)
     print("  🚗 SmartRoadHazard — Interactive Simulator")
-    print("  Simulates ESP32 + HC-SR04 sensor output")
+    print(f"  API: {API_URL}")
     print("═"*50)
     print("  Press a key and Enter:")
     print("")

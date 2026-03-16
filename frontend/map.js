@@ -1,16 +1,33 @@
 /**
  * SmartRoadHazard — Map & Live Polling Logic
  * Uses Leaflet.js + OpenStreetMap (FREE, no API key required)
- * Polls Flask API at localhost:5001 every 2 seconds
+ *
+ * MODE = 'firebase' → real-time updates from Firebase RTDB (Wokwi demo)
+ * MODE = 'local'    → polls Flask at localhost:5001 (simulator demo)
  */
 
-// DEPLOYMENT: Replace localhost:5001 with Railway URL after deploying
-// const API_BASE = 'https://YOUR-RAILWAY-URL.up.railway.app';
-// For local testing keep localhost:
+// ── Firebase config — replace placeholders after Firebase setup ──
+// See FIREBASE_SETUP.md for step-by-step instructions
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBg9oGwgQGzD5UZCOyBOjU2hFFEPUX1-0A",
+  authDomain:        "smartroadhazard.firebaseapp.com",
+  databaseURL:       "https://smartroadhazard-default-rtdb.firebaseio.com",
+  projectId:         "smartroadhazard",
+  storageBucket:     "smartroadhazard.firebasestorage.app",
+  messagingSenderId: "495982184999",
+  appId:             "1:495982184999:web:901e9ed1c880286d025c02",
+  measurementId:     "G-XDTZ5V4V0P",
+};
+
+// Change to 'local' when running the offline simulator demo
+const MODE = 'firebase';
+
+// Local Flask URL (used when MODE = 'local')
+// Replace YOUR-KOYEB-APP with your Koyeb domain if using cloud Flask
 const API_BASE = 'http://localhost:5001';
 const POLL_INTERVAL_MS = 2000;
 
-// Track markers by hazard id so we never duplicate
+// ── State ────────────────────────────────────────────────────────
 const markers = {};
 const knownHazardIds = new Set();
 
@@ -19,13 +36,13 @@ let vehicleMarker;
 let trailLine;
 const vehicleTrail = [];
 
-// ── Marker colours per severity / type ───────────────────────
+// ── Marker colours per severity / type ───────────────────────────
 const COLORS = {
-  deep:         '#e74c3c',   // red
-  medium:       '#e67e22',   // orange
-  shallow:      '#f1c40f',   // yellow
-  speedbreaker: '#3498db',   // blue
-  unverified:   '#95a5a6',   // grey
+  deep:         '#e74c3c',
+  medium:       '#e67e22',
+  shallow:      '#f1c40f',
+  speedbreaker: '#3498db',
+  unverified:   '#95a5a6',
 };
 
 function resolveColor(hazard) {
@@ -34,7 +51,7 @@ function resolveColor(hazard) {
   return COLORS[hazard.severity] || COLORS.unverified;
 }
 
-// ── Build a circular SVG icon for Leaflet ────────────────────
+// ── SVG circle icon for hazard markers ───────────────────────────
 function makeIcon(color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
     <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
@@ -47,17 +64,16 @@ function makeIcon(color) {
   });
 }
 
-// ── Initialise Leaflet map ────────────────────────────────────
+// ── Initialise Leaflet map ────────────────────────────────────────
 function initMap() {
   map = L.map('map', { zoomControl: true }).setView([21.1458, 79.0882], 14);
 
-  // OpenStreetMap tile layer — completely free, no key needed
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
-  // ── Vehicle marker (🚗 emoji, rendered via divIcon) ──────────
+  // Vehicle emoji marker
   const vehicleIcon = L.divIcon({
     className: '',
     html: '<div style="font-size:26px;transform:translate(-50%,-50%)">🚗</div>',
@@ -67,10 +83,10 @@ function initMap() {
 
   vehicleMarker = L.marker([21.145800, 79.088200], {
     icon: vehicleIcon,
-    zIndexOffset: 1000,  // Keep vehicle on top of hazard markers
+    zIndexOffset: 1000,
   }).addTo(map);
 
-  // ── Green dashed trail polyline ───────────────────────────────
+  // Green dashed trail
   trailLine = L.polyline([], {
     color: '#00ff88',
     weight: 2,
@@ -78,44 +94,86 @@ function initMap() {
     dashArray: '5, 8',
   }).addTo(map);
 
-  // Hide loading overlay once map is ready
   const overlay = document.getElementById('map-loading');
   if (overlay) overlay.style.display = 'none';
 
-  startPolling();
+  // Branch on mode — Firebase uses real-time listeners, local uses polling
+  if (MODE === 'firebase') {
+    initFirebase();
+    updateModeIndicator('🔥 Firebase Mode');
+  } else {
+    startPolling();
+    updateModeIndicator('🖥 Local Mode');
+  }
 }
 
-// ── Fetch vehicle position and move marker on map ─────────────
+// ── Firebase mode ────────────────────────────────────────────────
+// Initialise Firebase app and attach real-time listeners
+function initFirebase() {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const db = firebase.database();
+
+    // Real-time hazard listener — fires on every new/changed hazard
+    db.ref('/hazards').on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+      // Attach Firebase key as 'id' so addOrUpdateMarker can track duplicates
+      const hazards = Object.entries(data).map(([key, val]) => ({
+        ...val,
+        id: key,
+      }));
+      hazards.forEach(h => addOrUpdateMarker(h));
+      updateStats(hazards);
+      setConnectionStatus(true);
+      const ts = document.getElementById('last-updated');
+      if (ts) ts.textContent = new Date().toLocaleTimeString();
+    });
+
+    // Real-time vehicle position listener
+    db.ref('/vehicle/position').on('value', (snapshot) => {
+      const v = snapshot.val();
+      if (!v) return;
+      updateVehicleMarker(v.lat, v.lng, v.speed);
+    });
+
+  } catch (err) {
+    console.error('Firebase init error:', err);
+    setConnectionStatus(false);
+    // Fallback to local polling if Firebase fails
+    startPolling();
+  }
+}
+
+// ── Shared vehicle marker updater (used by both modes) ───────────
+function updateVehicleMarker(lat, lng, speed) {
+  if (!vehicleMarker) return;
+  const pos = [lat, lng];
+  vehicleMarker.setLatLng(pos);
+  vehicleMarker.bindPopup(
+    `<b>🚗 Vehicle</b><br/>` +
+    `Lat: ${Number(lat).toFixed(5)}<br/>` +
+    `Lng: ${Number(lng).toFixed(5)}<br/>` +
+    `Speed: ${speed || 30} km/h`
+  );
+  vehicleTrail.push(pos);
+  if (vehicleTrail.length > 15) vehicleTrail.shift();
+  trailLine.setLatLngs(vehicleTrail);
+}
+
+// ── Local mode — poll Flask API ──────────────────────────────────
 async function fetchVehiclePosition() {
   try {
     const res = await fetch(`${API_BASE}/api/vehicle`);
     if (!res.ok) return;
     const v = await res.json();
-    const pos = [v.lat, v.lng];
-
-    vehicleMarker.setLatLng(pos);
-    vehicleMarker.bindPopup(
-      `<b>🚗 Vehicle</b><br/>` +
-      `Lat: ${Number(v.lat).toFixed(5)}<br/>` +
-      `Lng: ${Number(v.lng).toFixed(5)}<br/>` +
-      `Speed: ${v.speed || 30} km/h`
-    );
-
-    // Add position to trail; keep only last 15 points
-    vehicleTrail.push(pos);
-    if (vehicleTrail.length > 15) vehicleTrail.shift();
-    trailLine.setLatLngs(vehicleTrail);
-  } catch (e) {
-    // Vehicle endpoint not available yet — silently ignore
-  }
+    updateVehicleMarker(v.lat, v.lng, v.speed);
+  } catch (e) {}
 }
 
-// ── Poll the API every 2 seconds ─────────────────────────────
 function startPolling() {
-  fetchAndUpdateHazards(); // first call immediately
+  fetchAndUpdateHazards();
   setInterval(fetchAndUpdateHazards, POLL_INTERVAL_MS);
-
-  // Vehicle position polls every 1 second for smooth movement
   fetchVehiclePosition();
   setInterval(fetchVehiclePosition, 1000);
 }
@@ -125,11 +183,9 @@ async function fetchAndUpdateHazards() {
     const res = await fetch(`${API_BASE}/api/hazards/all`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const hazards = await res.json();
-
     hazards.forEach(h => addOrUpdateMarker(h));
     updateStats(hazards);
     setConnectionStatus(true);
-
     const ts = document.getElementById('last-updated');
     if (ts) ts.textContent = new Date().toLocaleTimeString();
   } catch (err) {
@@ -138,26 +194,22 @@ async function fetchAndUpdateHazards() {
   }
 }
 
-// ── Add a new marker or update colour if verified status changed ──
+// ── Marker management (shared by both modes) ─────────────────────
 function addOrUpdateMarker(hazard) {
   const color = resolveColor(hazard);
   const icon  = makeIcon(color);
 
   if (markers[hazard.id]) {
-    // Update icon in case verified status changed
     markers[hazard.id].setIcon(icon);
     return;
   }
 
-  // First time seeing this hazard — create marker
   const marker = L.marker([hazard.lat, hazard.lng], { icon })
     .addTo(map)
     .bindPopup(buildPopup(hazard));
-
   marker.on('click', () => marker.openPopup());
   markers[hazard.id] = marker;
 
-  // Shadow alert for newly verified deep/medium potholes
   if (hazard.verified && (hazard.severity === 'deep' || hazard.severity === 'medium')) {
     if (!knownHazardIds.has(hazard.id)) {
       showAlert(`⚠️ ${(hazard.severity || '').toUpperCase()} POTHOLE detected near (${Number(hazard.lat).toFixed(4)}, ${Number(hazard.lng).toFixed(4)}) — Hazard Shadow Alert active!`);
@@ -167,12 +219,14 @@ function addOrUpdateMarker(hazard) {
   knownHazardIds.add(hazard.id);
 }
 
-// ── Popup HTML content ────────────────────────────────────────
+// ── Popup HTML — handles both Flask (first_detected) and Firebase (timestamp) fields ──
 function buildPopup(h) {
   const type     = (h.type || '').toUpperCase();
   const severity = h.severity ? h.severity.toUpperCase() : '—';
   const status   = h.verified ? '✅ Verified' : `⏳ Pending (${h.detection_count}/3)`;
-  const time     = h.first_detected ? new Date(h.first_detected).toLocaleString() : 'Unknown';
+  const time     = h.first_detected
+    ? new Date(h.first_detected).toLocaleString()
+    : (h.timestamp ? new Date(h.timestamp * 1000).toLocaleString() : 'Unknown');
   return `
     <div style="min-width:200px;font-family:sans-serif">
       <h3 style="margin:0 0 6px;color:#e94560">🚧 ${type}${h.severity ? ' — ' + severity : ''}</h3>
@@ -183,21 +237,20 @@ function buildPopup(h) {
     </div>`;
 }
 
-// ── Update sidebar stats ──────────────────────────────────────
+// ── Stats panel ───────────────────────────────────────────────────
 function updateStats(hazards) {
   const total         = hazards.length;
   const verified      = hazards.filter(h => h.verified).length;
   const potholes      = hazards.filter(h => h.type === 'pothole').length;
   const speedbreakers = hazards.filter(h => h.type === 'speedbreaker').length;
-
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('stat-total',        total);
-  set('stat-verified',     verified);
-  set('stat-potholes',     potholes);
+  set('stat-total',         total);
+  set('stat-verified',      verified);
+  set('stat-potholes',      potholes);
   set('stat-speedbreakers', speedbreakers);
 }
 
-// ── Bottom alert bar ─────────────────────────────────────────
+// ── Alert bar ─────────────────────────────────────────────────────
 function showAlert(message) {
   const bar = document.getElementById('alert-bar');
   const msg = document.getElementById('alert-message');
@@ -208,7 +261,7 @@ function showAlert(message) {
   bar._timer = setTimeout(() => { bar.style.display = 'none'; }, 5000);
 }
 
-// ── Connection status indicator ───────────────────────────────
+// ── Connection status ─────────────────────────────────────────────
 function setConnectionStatus(ok) {
   const el = document.getElementById('connection-status');
   if (!el) return;
@@ -216,11 +269,22 @@ function setConnectionStatus(ok) {
   el.style.color  = ok ? '#00ff88'     : '#e74c3c';
 }
 
-// ── Reset all hazards ─────────────────────────────────────────
+// ── Mode indicator ────────────────────────────────────────────────
+function updateModeIndicator(text) {
+  const el = document.getElementById('mode-indicator');
+  if (el) el.textContent = text;
+}
+
+// ── Reset all hazards ─────────────────────────────────────────────
 async function resetHazards() {
   if (!confirm('Clear all hazards from the database and map?')) return;
   try {
-    await fetch(`${API_BASE}/api/hazards`, { method: 'DELETE' });
+    if (MODE === 'firebase') {
+      firebase.database().ref('/hazards').remove();
+      firebase.database().ref('/vehicle').remove();
+    } else {
+      await fetch(`${API_BASE}/api/hazards`, { method: 'DELETE' });
+    }
     Object.values(markers).forEach(m => map.removeLayer(m));
     Object.keys(markers).forEach(k => delete markers[k]);
     knownHazardIds.clear();
@@ -231,5 +295,4 @@ async function resetHazards() {
   }
 }
 
-// Start the map when the page loads
 window.addEventListener('load', initMap);

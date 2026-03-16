@@ -1,6 +1,8 @@
 # Smart Road Hazard Detection & Alert System
 
-A full-stack IoT simulation project that detects road hazards (potholes and speedbreakers) using an HC-SR04 ultrasonic sensor simulated in Wokwi, processes data through a Python/Flask backend, stores it in a local SQLite database, and displays live hazard markers on a Google Maps web dashboard.
+A full-stack IoT simulation that detects road hazards using an HC-SR04 ultrasonic sensor
+on an ESP32 (simulated in Wokwi), processes data through a Python/Flask backend, stores
+it in SQLite, and displays live markers on a Leaflet map dashboard.
 
 **Built by:** Krish Potanwar | Ramdeobaba University, Nagpur | B.Tech CSE (AI & ML)
 
@@ -8,189 +10,111 @@ A full-stack IoT simulation project that detects road hazards (potholes and spee
 
 ## 3 Unique Innovations
 
-1. **Depth Classification** — Potholes are classified as Shallow / Medium / Deep based on the distance delta from baseline road surface (5 cm, 15 cm, 25 cm thresholds).
-2. **Crowd Verification** — A hazard is only published to the map after 3 or more independent vehicle detections at the same GPS location (within a 15-meter radius). Prevents false positives.
-3. **Hazard Shadow Alerting** — When a verified deep or medium hazard is detected, a real-time alert notification is shown on the dashboard to warn nearby drivers about hazards that may be hidden behind large vehicles.
+1. **Depth Classification** — Potholes graded Shallow / Medium / Deep by distance delta (5 / 15 / 25 cm thresholds).
+2. **Crowd Verification** — Hazard only published after 3+ independent detections within a 15 m radius. Prevents false positives.
+3. **Hazard Shadow Alert** — Verified deep/medium potholes trigger a dashboard notification to warn nearby drivers.
 
 ---
 
 ## Prerequisites
 
-- Python 3.10 or higher
-- pip (Python package manager)
-- A modern browser (Chrome, Firefox, Edge)
-- (Optional) A free Wokwi account at [wokwi.com](https://wokwi.com) for hardware simulation
+- Python 3.10+
+- pip
+- Modern browser (Chrome, Firefox, Edge)
+- (Optional) Free Wokwi account at [wokwi.com](https://wokwi.com)
 
 ---
 
-## Setup
-
-1. Clone or download this project to your machine.
-2. Navigate to the backend directory:
-   ```bash
-   cd SmartRoadHazard/backend
-   ```
-3. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-That's it. The SQLite database (`hazards.db`) is created automatically on first run — no additional database setup needed.
-
----
-
-## How to Run
-
-Open three separate terminals:
+## Quick Start (Local)
 
 ```bash
 # Terminal 1 — Start Flask backend
-cd backend && python server.py
+cd backend && pip install -r requirements.txt && python server.py
+
+# Terminal 2 — Generate demo detections
+cd backend && python bridge.py
+
+# Browser — Open dashboard
+open frontend/index.html   # Mac
+# OR double-click frontend/index.html on Windows/Linux
 ```
 
-```bash
-# Terminal 2 — Start demo bridge (auto-generates detections)
-cd backend && python bridge.py --mode demo
-```
+The dashboard polls `http://localhost:5001` every 2 seconds.
+Watch grey (unverified) markers turn colored as detection count reaches 3.
 
-```bash
-# Browser — Open dashboard (Mac)
-open frontend/index.html
-```
-
-On Windows/Linux, open `frontend/index.html` directly in your browser instead of using `open`.
-
-The Flask API runs at `http://localhost:5000`. The dashboard polls it every 2 seconds. Watch grey (unverified) markers turn colored as the detection count reaches 3.
+> **Note:** `frontend/map.js` defaults to the Koyeb cloud URL. Change `API_BASE` to
+> `http://localhost:5001` for local testing.
 
 ---
 
-## Google Maps API Key
+## Firebase Mode (Real IoT — No Server Needed)
 
-The dashboard requires a Google Maps JavaScript API key. The free tier is sufficient for this project.
+The cleanest demo: ESP32 in Wokwi sends detections directly to Firebase → your browser shows them live. No server to deploy or maintain.
 
-**Steps to get a free key:**
-
-1. Go to [https://console.cloud.google.com](https://console.cloud.google.com) and sign in with your Google account.
-2. Create a new project (e.g., "SmartRoadHazard").
-3. Navigate to **APIs & Services** → **Library**.
-4. Search for **Maps JavaScript API** and click **Enable**.
-5. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **API Key**.
-6. Copy the generated key.
-
-**Where to paste it:**
-
-Open `frontend/index.html` and find this line near the bottom:
-
-```html
-<script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap" async defer></script>
+```
+ESP32 (Wokwi) → Firebase RTDB → Browser (real-time)
 ```
 
-Replace `YOUR_GOOGLE_MAPS_API_KEY` with your actual key.
+**One-time setup (5 minutes):**
+See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for complete instructions.
 
-> Note: For a college demo on localhost, you can leave the key unrestricted. For any public deployment, restrict the key to your domain in the Google Cloud Console.
-
----
-
-## How to Use with Wokwi
-
-1. Go to [wokwi.com](https://wokwi.com) and sign in (free account).
-2. Click **New Project** → select **ESP32**.
-3. Open `wokwi/sketch.ino` in this project and copy its entire contents into the Wokwi code editor.
-4. Click the **diagram.json** tab in Wokwi and replace its contents with the contents of `wokwi/diagram.json` from this project.
-5. Open the **Library Manager** (book icon) and add:
-   - `Adafruit SSD1306`
-   - `Adafruit GFX Library`
-6. Click the green **Run** button to start the simulation.
-7. Click on the HC-SR04 sensor and drag its distance slider:
-   - Slider at ~45 cm → deep pothole detection
-   - Slider at ~25 cm → medium pothole detection
-   - Slider at ~8 cm → speedbreaker detection
-   - Slider at ~20 cm → normal road (no output)
-8. Watch the Serial Monitor panel for CSV output lines like `POTHOLE,DEEP,21.145823,79.088156`.
-9. Copy those lines and pipe them into the bridge in stdin mode:
-   ```bash
-   cd backend && python bridge.py --mode stdin
-   # Then paste the serial output lines and press Enter
-   ```
+**After setup, just:**
+1. Run Wokwi simulation
+2. Open `frontend/index.html` with `MODE = 'firebase'` in `map.js`
+3. Drag HC-SR04 slider → pin appears on map instantly!
 
 ---
 
-## How to Use Demo Mode (Without Wokwi)
+## Interactive Simulator
 
-If Wokwi is unavailable or you want a quick demonstration:
+A keyboard-driven simulator replaces Wokwi for instant demo:
 
 ```bash
-cd backend && python bridge.py --mode demo
+cd backend && python simulator.py
 ```
 
-- The bridge automatically generates realistic detections every 3 seconds along a Nagpur city route (Sitabuldi → Dharampeth → Sadar → Civil Lines → High Court area).
-- Open `frontend/index.html` in your browser and watch markers appear on the map.
-- Grey markers (unverified) gradually turn colored once the detection count reaches 3 for a location.
-- Deep pothole detections trigger the Hazard Shadow Alert notification bar.
-- Use the **Reset** button on the dashboard to clear all data and start fresh.
+Press **1** (deep pothole), **2** (medium), **3** (shallow), **4** (speedbreaker), **5** (normal), **q** (quit).
+
+---
+
+## Using Wokwi (Real IoT Simulation)
+
+1. Go to [wokwi.com](https://wokwi.com) → New Project → ESP32
+2. Paste `wokwi/sketch.ino` into the code editor
+3. Replace `diagram.json` with `wokwi/diagram.json`
+4. Install libraries: `Adafruit SSD1306` and `Adafruit GFX Library`
+5. Click **Run**
+6. Drag the HC-SR04 slider: `~45 cm` = deep pothole, `~8 cm` = speedbreaker, `~20 cm` = normal
+7. ESP32 POSTs detections directly to your Koyeb server via WiFi
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full cloud deployment guide.
 
 ---
 
 ## API Reference
 
-All endpoints are served at `http://localhost:5000`.
+All endpoints at `http://localhost:5001` (or your Koyeb URL).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/hazards` | All verified hazards (detection_count >= 3) |
-| GET | `/api/hazards/all` | All hazards including unverified |
-| POST | `/api/hazards` | Add a new detection `{type, severity, lat, lng}` |
-| GET | `/api/stats` | Statistics: total, verified, potholes, speedbreakers, by severity |
-| DELETE | `/api/hazards` | Clear all hazard records (use for demo reset) |
-
-**Example POST body:**
-```json
-{
-  "type": "pothole",
-  "severity": "deep",
-  "lat": 21.145823,
-  "lng": 79.088156
-}
-```
-
-**Example GET /api/stats response:**
-```json
-{
-  "total": 12,
-  "verified": 8,
-  "potholes": 9,
-  "speedbreakers": 3,
-  "deep": 3,
-  "medium": 4,
-  "shallow": 2
-}
-```
+| GET | `/api/hazards` | Verified hazards (count >= 3) |
+| GET | `/api/hazards/all` | All hazards including pending |
+| POST | `/api/hazards` | Add detection `{type, severity, lat, lng}` |
+| GET | `/api/stats` | Total, verified, by type and severity |
+| DELETE | `/api/hazards` | Clear all (demo reset) |
+| GET | `/api/vehicle` | Last known vehicle position |
+| POST | `/api/vehicle` | Update vehicle position |
 
 ---
 
-## Test Scenarios for Demo Day
+## Demo Day Scenarios
 
-### Scenario 1 — Pothole Detection (Wokwi)
-- Set HC-SR04 slider to 45 cm in Wokwi.
-- Serial monitor prints `POTHOLE,DEEP,21.14xxxx,79.08xxxx`.
-- After 3 detections at the same location, a red marker appears on the Nagpur map.
-
-### Scenario 2 — Speedbreaker Detection (Wokwi)
-- Set HC-SR04 slider to 8 cm in Wokwi.
-- Serial monitor prints `SPEEDBREAKER,21.14xxxx,79.08xxxx`.
-- After 3 detections, a blue marker appears on the map.
-
-### Scenario 3 — Crowd Verification (Demo Mode)
-- Run `python bridge.py --mode demo`.
-- Observe grey (unverified) markers appearing first.
-- As detection count reaches 3, markers transition to their color-coded verified state.
-- Demonstrates the anti-false-positive crowd verification system.
-
-### Scenario 4 — Hazard Shadow Alert
-- When a deep pothole is verified (3+ detections), the alert bar at the bottom of the dashboard displays:
-  `⚠️ DEEP POTHOLE detected — Hazard Shadow Alert active!`
-- The alert auto-dismisses after 5 seconds.
-- Demonstrates the innovation of warning nearby drivers about hidden hazards.
+| Scenario | Action | Expected Result |
+|----------|--------|-----------------|
+| Deep pothole | Slider to 45 cm in Wokwi | Red pin on Nagpur map after 3 detections |
+| Speedbreaker | Slider to 8 cm | Blue pin after 3 detections |
+| Crowd verification | Run `bridge.py` | Grey -> colored marker transition |
+| Shadow alert | Deep pothole verified | Alert bar: DEEP POTHOLE — Hazard Shadow Alert! |
 
 ---
 
@@ -198,22 +122,27 @@ All endpoints are served at `http://localhost:5000`.
 
 ```
 SmartRoadHazard/
-├── CLAUDE.md                  ← Claude Code instructions
-├── README.md                  ← this file
+├── CLAUDE.md
+├── README.md
+├── DEPLOYMENT.md          <- Koyeb cloud deployment guide
 ├── .gitignore
 ├── wokwi/
-│   ├── sketch.ino             ← ESP32 Arduino code
-│   └── diagram.json           ← Wokwi circuit layout
+│   ├── sketch.ino         <- ESP32 code (sensor + WiFi HTTP POST)
+│   └── diagram.json       <- Wokwi circuit layout
 ├── backend/
-│   ├── bridge.py              ← Wokwi serial bridge + demo data generator
-│   ├── server.py              ← Flask REST API server
-│   ├── database.py            ← SQLite operations + crowd verification logic
-│   ├── requirements.txt       ← Python dependencies
-│   └── hazards.db             ← auto-created on first run (not committed)
+│   ├── server.py          <- Flask REST API (7 endpoints)
+│   ├── database.py        <- SQLite + Haversine crowd verification
+│   ├── bridge.py          <- Demo data generator
+│   ├── simulator.py       <- Interactive keyboard simulator
+│   ├── requirements.txt
+│   ├── Procfile           <- Koyeb/gunicorn start command
+│   ├── runtime.txt        <- Python version pin
+│   ├── koyeb.yaml         <- Koyeb deploy config
+│   └── hazards.db         <- auto-created on first run (gitignored)
 └── frontend/
-    ├── index.html             ← main web dashboard
-    ├── map.js                 ← Google Maps logic + live polling
-    └── style.css              ← dashboard styling
+    ├── index.html         <- Dashboard
+    ├── map.js             <- Leaflet map + live polling + vehicle tracker
+    └── style.css          <- Dark theme styling
 ```
 
 ---
@@ -224,12 +153,11 @@ SmartRoadHazard/
 |------|------|---------------|
 | | | |
 | | | |
-| | | |
 
-*(Fill in your details here before submission)*
+*(Fill in before submission)*
 
 ---
 
 ## License
 
-This project is developed for academic purposes at Ramdeobaba University, Nagpur.
+Academic project — Ramdeobaba University, Nagpur.

@@ -24,3 +24,14 @@ node_modules/
 
 # Logs
 *.log
+
+# Firebase
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc
+
+# Firebase service account credentials — NEVER commit these
+service-account.json
+firebase-adminsdk-*.json
+*-firebase-adminsdk-*.json

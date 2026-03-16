@@ -379,9 +379,8 @@ html, body {
 /* --- Last Updated Timestamp -------------------------------- */
 #last-updated {
   font-size: 0.68rem;
-  color: #4455880;
-  text-align: center;
   color: #445588;
+  text-align: center;
   margin-top: -10px;
 }
 
@@ -389,3 +388,6 @@ html, body {
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #0f0f1a; }
 ::-webkit-scrollbar-thumb { background: #2a3a6a; border-radius: 3px; }
+
+/* --- Vehicle popup ----------------------------------------- */
+.vehicle-popup { font-family: sans-serif; min-width: 160px; }

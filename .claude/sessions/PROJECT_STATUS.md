@@ -4,7 +4,7 @@ Built by: Claude Code
 Developer: Krish Potanwar, Ramdeobaba University, Nagpur
 
 ## Current Status
-COMPLETE
+PRODUCTION READY — Firebase RTDB + Koyeb deployment (dual-mode)
 
 ## What This Project Does
 A full-stack IoT simulation that detects road hazards (potholes and speedbreakers) using
@@ -63,7 +63,22 @@ a bottom-bar shadow alert for newly verified deep/medium potholes.
 - CORS enabled on Flask to allow requests from file:// origin
 - Demo mode auto-generates data along 5 Nagpur waypoints so project works without Wokwi
 
-## Railway Deployment (added 2026-03-17)
+## Koyeb Deployment + Full Cleanup (2026-03-17)
+- Removed: send_serial.py, railway.json, stdin bridge mode, pyserial
+- Added: koyeb.yaml, cleaned Procfile (--workers 1 --timeout 120)
+- sketch.ino: renamed postToRailway→postDetection, SERVER_URL (Koyeb), condensed comments
+- map.js: API_BASE → Koyeb placeholder, vehicle marker + trail intact
+- index.html: title → "SmartRoadHazard — Nagpur"
+- style.css: fixed duplicate/invalid color in #last-updated, added .vehicle-popup
+- bridge.py: stdin mode removed, SMARTROAD_API env var override
+- simulator.py: SMARTROAD_API env var, shows API target in header
+- database.py: removed debug print statements, fixed SQL pattern in get_stats()
+- README.md: removed Google Maps + Railway + stdin refs, fully updated
+- DEPLOYMENT.md: switched to Koyeb guide (free forever, no credit card)
+- Security audit: 1 issue fixed (f-string in get_stats SQL → static queries)
+- URL placeholder: search YOUR-KOYEB-APP in sketch.ino + map.js to replace after deploy
+
+## Railway Deployment (added 2026-03-17 — superseded by Koyeb)
 - Deployment status: RAILWAY READY
 - Railway files added: backend/Procfile, backend/runtime.txt, backend/railway.json
 - gunicorn added to requirements.txt
@@ -81,9 +96,18 @@ a bottom-bar shadow alert for newly verified deep/medium potholes.
 - hazards.db is gitignored and auto-created on first `python server.py` run
 - SQLite resets on Railway redeploy (fine for demo)
 
+## Firebase Integration (added 2026-03-17)
+- Firebase project: `smartroadhazard` (RTDB at smartroadhazard-default-rtdb.firebaseio.com)
+- sketch.ino: pushToFirebase() + pushVehiclePosition() after every detection
+- map.js: dual-mode — MODE='firebase' uses real-time RTDB listeners (no server needed)
+- map.js: MODE='local' polls Flask at localhost:5001
+- index.html: Firebase compat SDK v9.23.0 CDN scripts added
+- See FIREBASE_SETUP.md for setup steps
+- Real credentials already set in sketch.ino and map.js
+
 ## If You Are Resuming This Project
-1. Read this file first
-2. Check that all files exist (see Files Created above + Procfile, runtime.txt, railway.json, DEPLOYMENT.md)
-3. Local demo: `python server.py` + `python bridge.py --mode demo` + open `frontend/index.html`
-4. Deploy to internet: follow DEPLOYMENT.md step by step
-5. After getting Railway URL: replace YOUR-RAILWAY-URL in sketch.ino, map.js, bridge.py
+1. Read this file and DEPLOYMENT.md
+2. Local demo: `python server.py` + `python bridge.py` + open `frontend/index.html`
+   (change API_BASE in map.js to http://localhost:5001 for local)
+3. Deploy to internet: follow DEPLOYMENT.md step by step
+4. After getting Koyeb URL: replace YOUR-KOYEB-APP in sketch.ino and map.js

@@ -92,7 +92,6 @@ def init_db() -> None:
             )
         """)
         conn.commit()
-    print(f"[DB] Initialised. Path: {DB_PATH}")
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +195,6 @@ def clear_all() -> None:
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("DELETE FROM hazards")
         conn.commit()
-    print("[DB] All hazards cleared.")
 
 
 def mark_resolved(hazard_id: int) -> None:
@@ -245,25 +243,44 @@ def get_stats() -> dict:
     Returns:
         dict with keys: total, verified, potholes, speedbreakers,
                         deep, medium, shallow.
+
+    All queries use fully hardcoded SQL with bound parameters — no
+    string interpolation — to eliminate any risk of SQL injection.
     """
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
 
-        def count(where: str, params: tuple = ()) -> int:
-            row = conn.execute(
-                f"SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND {where}",
-                params,
-            ).fetchone()
+        def _count(sql: str, params: tuple = ()) -> int:
+            row = conn.execute(sql, params).fetchone()
             return row["n"] if row else 0
 
         return {
-            "total":        count("1 = 1"),
-            "verified":     count("verified = 1"),
-            "potholes":     count("type = ?", ("pothole",)),
-            "speedbreakers": count("type = ?", ("speedbreaker",)),
-            "deep":         count("severity = ?", ("deep",)),
-            "medium":       count("severity = ?", ("medium",)),
-            "shallow":      count("severity = ?", ("shallow",)),
+            "total": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0"
+            ),
+            "verified": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND verified = 1"
+            ),
+            "potholes": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND type = ?",
+                ("pothole",),
+            ),
+            "speedbreakers": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND type = ?",
+                ("speedbreaker",),
+            ),
+            "deep": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND severity = ?",
+                ("deep",),
+            ),
+            "medium": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND severity = ?",
+                ("medium",),
+            ),
+            "shallow": _count(
+                "SELECT COUNT(*) AS n FROM hazards WHERE resolved = 0 AND severity = ?",
+                ("shallow",),
+            ),
         }
 
 

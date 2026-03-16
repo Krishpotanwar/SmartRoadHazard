@@ -1,7 +1,15 @@
-# SmartRoadHazard — Deployment Guide
+# SmartRoadHazard — Koyeb Deployment Guide
 
-Deploy the Flask backend to Railway (free) so the Wokwi ESP32 simulation can
-POST data to a real public URL.
+Free forever. No credit card. No expiry.
+
+---
+
+## Why Koyeb
+
+- Free forever (not a trial)
+- No credit card required
+- 512 MB RAM, always on (no cold starts)
+- Auto-deploys from GitHub on every push
 
 ---
 
@@ -10,105 +18,100 @@ POST data to a real public URL.
 ```bash
 git init
 git add .
-git commit -m "SmartRoadHazard — ready for deployment"
+git commit -m "SmartRoadHazard v1.0"
 git remote add origin https://github.com/YOUR_USERNAME/SmartRoadHazard
 git push -u origin main
 ```
 
 ---
 
-## Step 2 — Deploy to Railway (free)
+## Step 2 — Deploy on Koyeb
 
-1. Go to <https://railway.app> → Sign in with GitHub
-2. Click **New Project** → **Deploy from GitHub repo**
+1. Go to <https://koyeb.com> → Sign up free (GitHub login)
+2. Click **Create App** → **GitHub**
 3. Select your `SmartRoadHazard` repository
 4. Set **Root Directory** to: `backend`
-5. Railway auto-detects Python via `runtime.txt` and installs `requirements.txt`
-6. Click **Settings → Networking → Generate Domain**
-7. Copy your URL — it looks like: `https://smartroadhazard-production.up.railway.app`
-
-> Railway's free tier gives 500 hours/month — more than enough for a demo.
-> SQLite data resets on each redeploy, which is fine for demo purposes.
-
----
-
-## Step 3 — Update 3 Files With Your Railway URL
-
-Search for `YOUR-RAILWAY-URL` in the project and replace with your actual domain.
-
-### `wokwi/sketch.ino`
-```cpp
-const char* RAILWAY_URL = "https://YOUR-APP.up.railway.app/api/hazards";
-const char* VEHICLE_URL = "https://YOUR-APP.up.railway.app/api/vehicle";
-```
-
-### `frontend/map.js`
-```js
-const API_BASE = 'https://YOUR-APP.up.railway.app';
-```
-
-### `backend/bridge.py`
-```python
-API_URL = "https://YOUR-APP.up.railway.app/api/hazards"
-```
+5. Build command: `pip install -r requirements.txt`
+6. Run command: `gunicorn server:app --bind 0.0.0.0:$PORT --workers 1`
+7. Click **Deploy**
+8. Wait ~2 minutes for the build
+9. Your URL: `https://smartroadhazard-yourname.koyeb.app`
 
 ---
 
-## Step 4 — Verify Deployment
+## Step 3 — Verify Deployment
 
-Open your Railway URL in a browser:
+Open your Koyeb URL in a browser:
 
 ```
-https://YOUR-APP.up.railway.app/
+https://YOUR-APP.koyeb.app/
 ```
 
-You should see:
+Expected response:
 ```json
-{"status": "ok", "message": "SmartRoadHazard API is running", ...}
-```
-
-Also test the hazards endpoint:
-```
-https://YOUR-APP.up.railway.app/api/hazards
+{ "status": "ok", "message": "SmartRoadHazard API is running" }
 ```
 
 ---
 
-## Step 5 — Run Wokwi With Real WiFi
+## Step 4 — Replace YOUR-KOYEB-APP in 3 Files
+
+Search for `YOUR-KOYEB-APP` and replace with your actual app name.
+
+**`wokwi/sketch.ino`**
+```cpp
+const char* SERVER_URL  = "https://YOUR-APP.koyeb.app/api/hazards";
+const char* VEHICLE_URL = "https://YOUR-APP.koyeb.app/api/vehicle";
+```
+
+**`frontend/map.js`**
+```js
+const API_BASE = 'https://YOUR-APP.koyeb.app';
+```
+
+**`backend/bridge.py`** (optional — only needed if running demo mode against cloud)
+```bash
+SMARTROAD_API=https://YOUR-APP.koyeb.app python bridge.py
+```
+
+After replacing, commit and push:
+```bash
+git add .
+git commit -m "Set Koyeb URL"
+git push
+```
+
+---
+
+## Step 5 — Test the Full IoT Pipeline
 
 1. Open [wokwi.com](https://wokwi.com) → load `wokwi/sketch.ino` and `wokwi/diagram.json`
-2. Start the simulation
-3. ESP32 connects to `"Wokwi-GUEST"` WiFi automatically (free, built-in to Wokwi)
-4. Serial Monitor shows: `WiFi connected! IP: ...`
-5. Drag the HC-SR04 slider to **45 cm** (deep pothole)
-6. Serial Monitor shows: `POTHOLE,DEEP,...` then `POST → HTTP 200`
-7. Open `frontend/index.html` in a browser
-8. **Red pin appears on the Nagpur map after 3 detections!**
+2. Run the simulation — ESP32 connects to `Wokwi-GUEST` WiFi automatically
+3. Drag the HC-SR04 slider to **45 cm** (deep pothole)
+4. Serial Monitor shows: `POST → HTTP 200`
+5. Open `frontend/index.html` in a browser (with Koyeb URL in `API_BASE`)
+6. Red pin appears on the Nagpur map after 3 detections!
+7. Vehicle marker moves along the route
 
 ---
 
-## Step 6 — Demo Day Setup
+## Local Demo Fallback (No Internet Needed)
 
-### Option A — Full Internet Demo (recommended)
-- Wokwi running in browser tab
-- `frontend/index.html` open in another tab
-- `API_BASE` in `map.js` pointing to Railway URL
-- Drag HC-SR04 slider → pin appears on map (real IoT data flow!)
-
-### Option B — Local Fallback (no internet needed)
 ```bash
-# Terminal 1
+# Terminal 1 — Flask backend
 cd backend && python server.py
 
-# Terminal 2
-cd backend && python bridge.py --mode demo
-# OR for interactive:
+# Terminal 2 — Demo data generator
+cd backend && python bridge.py
+
+# OR interactive simulator
 cd backend && python simulator.py
 
 # Browser
 open frontend/index.html
 ```
-`API_BASE` must be `http://localhost:5001` for this mode.
+
+Change `API_BASE` in `frontend/map.js` back to `http://localhost:5001` for local mode.
 
 ---
 
@@ -119,7 +122,7 @@ open frontend/index.html
 | GET | `/` | Health check |
 | GET | `/api/hazards` | Verified hazards only |
 | GET | `/api/hazards/all` | All hazards including unverified |
-| POST | `/api/hazards` | Add new detection |
+| POST | `/api/hazards` | Add detection `{type, severity, lat, lng}` |
 | GET | `/api/stats` | Aggregate statistics |
 | DELETE | `/api/hazards` | Clear all (demo reset) |
 | GET | `/api/vehicle` | Last known vehicle position |
@@ -127,22 +130,9 @@ open frontend/index.html
 
 ---
 
-## Environment Variables (Railway)
+## Notes
 
-Railway sets `PORT` automatically. No other env vars are required.
-
-| Variable | Set by | Default |
-|----------|--------|---------|
-| `PORT` | Railway (automatic) | 5001 (local) |
-| `FLASK_ENV` | Optional — set to `development` for debug mode | production |
-
----
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `POST → HTTP -1` in Wokwi | Railway URL not set in sketch.ino — update `RAILWAY_URL` |
-| Map shows no markers | `API_BASE` in map.js still points to localhost — update to Railway URL |
-| Railway build fails | Check that Root Directory is set to `backend` in Railway settings |
-| WiFi failed in Wokwi | Normal if using older Wokwi project — WiFi only works in new ESP32 projects |
+- SQLite data resets on Koyeb redeploy — fine for demo purposes
+- Free tier is always on — no cold start delays
+- CORS is enabled for all origins in `server.py`
+- Wokwi WiFi (`Wokwi-GUEST`) is built-in and free — no setup needed
