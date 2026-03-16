@@ -22,9 +22,10 @@ const FIREBASE_CONFIG = {
 // Change to 'local' when running the offline simulator demo
 const MODE = 'firebase';
 
-// Local Flask URL (used when MODE = 'local')
-// Replace YOUR-KOYEB-APP with your Koyeb domain if using cloud Flask
-const API_BASE = 'http://localhost:5001';
+// Flask backend URL (used when MODE = 'local')
+// Replace YOUR-RENDER-APP with your actual Render domain after deployment
+// render.com — free, no credit card required
+const API_BASE = 'https://YOUR-RENDER-APP.onrender.com';
 const POLL_INTERVAL_MS = 2000;
 
 // ── State ────────────────────────────────────────────────────────
@@ -35,6 +36,11 @@ let map;
 let vehicleMarker;
 let trailLine;
 const vehicleTrail = [];
+
+// GPS state — real device location supplied by the browser
+let currentGps    = null;   // {lat, lng, accuracy} — null until first fix
+let gpsReady      = false;  // true after first valid position received
+const pendingQueue = [];     // pending_hazard events that arrived before GPS was ready
 
 // ── Marker colours per severity / type ───────────────────────────
 const COLORS = {
@@ -114,6 +120,9 @@ function initFirebase() {
     firebase.initializeApp(FIREBASE_CONFIG);
     const db = firebase.database();
 
+    // Start real GPS — browser supplies coordinates; ESP32 no longer sends them
+    startGPS(db);
+
     // Real-time hazard listener — fires on every new/changed hazard
     db.ref('/hazards').on('value', (snapshot) => {
       const data = snapshot.val();
@@ -130,11 +139,24 @@ function initFirebase() {
       if (ts) ts.textContent = new Date().toLocaleTimeString();
     });
 
-    // Real-time vehicle position listener
+    // Real-time vehicle position listener — now comes from browser GPS (via onGpsSuccess)
     db.ref('/vehicle/position').on('value', (snapshot) => {
       const v = snapshot.val();
       if (!v) return;
       updateVehicleMarker(v.lat, v.lng, v.speed);
+    });
+
+    // Listen for pending hazards pushed by the ESP32 (no GPS coordinates yet)
+    // Browser stamps current GPS location and moves them to /hazards
+    db.ref('/pending_hazards').on('child_added', (snapshot) => {
+      const key   = snapshot.key;
+      const event = snapshot.val();
+      if (!event) return;
+      if (gpsReady) {
+        resolveAndPostHazard(db, key, event);
+      } else {
+        pendingQueue.push({ key, event });
+      }
     });
 
   } catch (err) {
@@ -143,6 +165,95 @@ function initFirebase() {
     // Fallback to local polling if Firebase fails
     startPolling();
   }
+}
+
+// ── Real Device GPS ───────────────────────────────────────────────
+// Requests the browser's GPS and keeps a live position watch.
+// The vehicle marker moves to the real location; pending hazards
+// from the ESP32 get stamped with these coordinates.
+function startGPS(db) {
+  if (!navigator.geolocation) {
+    updateGpsStatus('unavailable');
+    return;
+  }
+  updateGpsStatus('requesting');
+  navigator.geolocation.watchPosition(
+    (position) => onGpsSuccess(db, position),
+    onGpsError,
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
+  );
+}
+
+function onGpsSuccess(db, position) {
+  const { latitude: lat, longitude: lng, accuracy } = position.coords;
+  currentGps = { lat, lng, accuracy };
+
+  if (!gpsReady) {
+    gpsReady = true;
+    updateGpsStatus('active');
+    processPendingQueue(db);
+  }
+
+  // Move vehicle marker to real location
+  updateVehicleMarker(lat, lng, null);
+
+  // Publish real position to Firebase so other clients see the vehicle
+  db.ref('/vehicle/position').set({
+    lat, lng, accuracy,
+    ts: Math.floor(Date.now() / 1000),
+    source: 'browser',
+  });
+}
+
+function onGpsError(err) {
+  if (err.code === err.PERMISSION_DENIED) {
+    updateGpsStatus('denied');
+    showAlert('GPS permission denied — hazard pins will use approximate location.');
+  } else {
+    // Non-fatal: watchPosition keeps trying
+    updateGpsStatus('unavailable');
+  }
+}
+
+function updateGpsStatus(state) {
+  const el = document.getElementById('gps-status');
+  if (!el) return;
+  const map = {
+    requesting:  { text: '📡 GPS initialising…',   color: '#f39c12' },
+    active:      { text: '📍 GPS Active',           color: '#00ff88' },
+    denied:      { text: '🚫 GPS Denied',           color: '#e74c3c' },
+    unavailable: { text: '⚠️ GPS Unavailable',      color: '#e67e22' },
+  };
+  const s = map[state] || map.requesting;
+  el.textContent  = s.text;
+  el.style.color  = s.color;
+}
+
+// Drain any pending_hazard events that arrived before GPS was ready
+function processPendingQueue(db) {
+  while (pendingQueue.length > 0) {
+    const { key, event } = pendingQueue.shift();
+    resolveAndPostHazard(db, key, event);
+  }
+}
+
+// Stamp current GPS onto a pending hazard, write to /hazards, delete from /pending_hazards
+function resolveAndPostHazard(db, key, event) {
+  if (!currentGps) return; // Should not happen after gpsReady, but guard anyway
+  const { lat, lng, accuracy } = currentGps;
+  db.ref('/hazards/' + key).set({
+    type:            event.type,
+    severity:        event.severity || null,
+    lat,
+    lng,
+    accuracy,
+    verified:        false,
+    detection_count: 1,
+    timestamp:       event.timestamp || Math.floor(Date.now() / 1000),
+    gps_source:      'browser',
+  })
+  .then(() => db.ref('/pending_hazards/' + key).remove())
+  .catch(err => console.error('resolveAndPostHazard failed for key', key, err));
 }
 
 // ── Shared vehicle marker updater (used by both modes) ───────────
@@ -281,6 +392,7 @@ async function resetHazards() {
   try {
     if (MODE === 'firebase') {
       firebase.database().ref('/hazards').remove();
+      firebase.database().ref('/pending_hazards').remove();
       firebase.database().ref('/vehicle').remove();
     } else {
       await fetch(`${API_BASE}/api/hazards`, { method: 'DELETE' });

@@ -34,19 +34,14 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 #define SHALLOW_THRESHOLD      5
 #define SPEEDBREAKER_THRESHOLD -5
 
-// GPS simulation (Nagpur base coordinates)
-float baseLat = 21.145800;
-float baseLng = 79.088200;
-
 // WiFi — Wokwi's free built-in open network (no password needed)
 const char* WIFI_SSID     = "Wokwi-GUEST";
 const char* WIFI_PASSWORD = "";
 #define WIFI_CHANNEL 6
 
-// Koyeb server URLs — replace YOUR-KOYEB-APP after deployment
-// See DEPLOYMENT.md for instructions
-const char* SERVER_URL  = "https://YOUR-KOYEB-APP.koyeb.app/api/hazards";
-const char* VEHICLE_URL = "https://YOUR-KOYEB-APP.koyeb.app/api/vehicle";
+// Render server URL — replace YOUR-RENDER-APP after deployment
+// See DEPLOYMENT.md for instructions (render.com, free, no credit card)
+const char* SERVER_URL  = "https://YOUR-RENDER-APP.onrender.com/api/hazards";
 
 // Firebase Realtime Database — REST API (no library needed)
 // Rules are open (.read/.write = true) so no auth token required for demo
@@ -79,7 +74,8 @@ void connectWiFi() {
 
 // ── HTTP helpers ─────────────────────────────────────────────────
 // POST a hazard detection to the Koyeb cloud server
-void postDetection(String type, String severity, float lat, float lng) {
+// lat/lng are 0.0 — browser will stamp real GPS coordinates via Firebase
+void postDetection(String type, String severity) {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(SERVER_URL);
@@ -87,64 +83,34 @@ void postDetection(String type, String severity, float lat, float lng) {
   http.setTimeout(5000);
   String body;
   if (severity == "") {
-    body = "{\"type\":\"" + type + "\",\"severity\":null,\"lat\":" + String(lat, 6) + ",\"lng\":" + String(lng, 6) + "}";
+    body = "{\"type\":\"" + type + "\",\"severity\":null,\"lat\":0.0,\"lng\":0.0}";
   } else {
-    body = "{\"type\":\"" + type + "\",\"severity\":\"" + severity + "\",\"lat\":" + String(lat, 6) + ",\"lng\":" + String(lng, 6) + "}";
+    body = "{\"type\":\"" + type + "\",\"severity\":\"" + severity + "\",\"lat\":0.0,\"lng\":0.0}";
   }
   int code = http.POST(body);
   Serial.println("Koyeb POST → HTTP " + String(code));
   http.end();
 }
 
-// POST current vehicle GPS position to Koyeb
-void postVehiclePosition(float lat, float lng) {
-  if (WiFi.status() != WL_CONNECTED) return;
-  HTTPClient http;
-  http.begin(VEHICLE_URL);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(3000);
-  String body = "{\"lat\":" + String(lat, 6) + ",\"lng\":" + String(lng, 6) + ",\"speed\":30}";
-  http.POST(body);
-  http.end();
-}
-
 // ── Firebase REST API ─────────────────────────────────────────────
-// PUT a hazard to Firebase RTDB via the REST API (no library needed)
-// Rules are open so no auth token required for demo
-void pushToFirebase(String type, String severity, float lat, float lng) {
+// PUT a pending hazard to Firebase RTDB — no GPS coordinates.
+// The browser (map.js) watches /pending_hazards, stamps its real GPS,
+// writes to /hazards, then deletes the pending entry.
+void pushPendingHazard(String type, String severity) {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
-  // Use millis() as unique key under /hazards/
-  String url = "https://" + String(FIREBASE_HOST) + "/hazards/" + String(millis()) + ".json";
+  // Use millis() as unique key under /pending_hazards/
+  String url = "https://" + String(FIREBASE_HOST) + "/pending_hazards/" + String(millis()) + ".json";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
   String sevField = (severity == "") ? "null" : ("\"" + severity + "\"");
   String body = "{\"type\":\"" + type + "\","
                 "\"severity\":" + sevField + ","
-                "\"lat\":" + String(lat, 6) + ","
-                "\"lng\":" + String(lng, 6) + ","
-                "\"verified\":false,"
-                "\"detection_count\":1,"
-                "\"timestamp\":" + String(millis() / 1000) + "}";
+                "\"timestamp\":" + String(millis() / 1000) + ","
+                "\"status\":\"pending\"}";
   int code = http.PUT(body);
   Serial.println("Firebase PUT → HTTP " + String(code));
-  http.end();
-}
-
-// PUT vehicle position to Firebase RTDB
-void pushVehiclePosition(float lat, float lng) {
-  if (WiFi.status() != WL_CONNECTED) return;
-  HTTPClient http;
-  String url = "https://" + String(FIREBASE_HOST) + "/vehicle/position.json";
-  http.begin(url);
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(3000);
-  String body = "{\"lat\":" + String(lat, 6) + ","
-                "\"lng\":" + String(lng, 6) + ","
-                "\"speed\":30,"
-                "\"ts\":" + String(millis() / 1000) + "}";
-  http.PUT(body);
   http.end();
 }
 
@@ -255,7 +221,6 @@ void setup() {
   delay(2000);
 
   calibrate();
-  randomSeed(analogRead(0));
 }
 
 // ── Loop ──────────────────────────────────────────────────────────
@@ -265,75 +230,52 @@ void loop() {
   float currentDistance = measureDistance();
   float delta = currentDistance - baseline;
 
-  // Simulate GPS: tiny random offset around Nagpur base coords
-  float lat = baseLat + (random(-5, 5) / 10000.0);
-  float lng = baseLng + (random(-5, 5) / 10000.0);
-
   unsigned long now = millis();
   bool inCooldown = (now - lastDetectionTime) < COOLDOWN_MS;
 
   if (delta > DEEP_THRESHOLD && !inCooldown) {
-    Serial.print("POTHOLE,DEEP,");
-    Serial.print(lat, 6);
-    Serial.print(",");
-    Serial.println(lng, 6);
+    // Browser will stamp real GPS — ESP32 just reports type + severity
+    Serial.println("POTHOLE,DEEP");
     blinkLED(RED_LED_PIN, 3);
     allLEDsOff();
     updateOLED("POTHOLE", "SEVERITY: DEEP",
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
-    postDetection("pothole", "deep", lat, lng);
-    postVehiclePosition(lat, lng);
-    pushToFirebase("pothole", "deep", lat, lng);
-    pushVehiclePosition(lat, lng);
+    postDetection("pothole", "deep");       // Koyeb (lat=0, browser adds GPS)
+    pushPendingHazard("pothole", "deep");   // Firebase (browser stamps GPS)
     lastDetectionTime = now;
 
   } else if (delta > MEDIUM_THRESHOLD && !inCooldown) {
-    Serial.print("POTHOLE,MEDIUM,");
-    Serial.print(lat, 6);
-    Serial.print(",");
-    Serial.println(lng, 6);
+    Serial.println("POTHOLE,MEDIUM");
     blinkLED(YELLOW_LED_PIN, 2);
     allLEDsOff();
     updateOLED("POTHOLE", "SEVERITY: MEDIUM",
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
-    postDetection("pothole", "medium", lat, lng);
-    postVehiclePosition(lat, lng);
-    pushToFirebase("pothole", "medium", lat, lng);
-    pushVehiclePosition(lat, lng);
+    postDetection("pothole", "medium");
+    pushPendingHazard("pothole", "medium");
     lastDetectionTime = now;
 
   } else if (delta > SHALLOW_THRESHOLD && !inCooldown) {
-    Serial.print("POTHOLE,SHALLOW,");
-    Serial.print(lat, 6);
-    Serial.print(",");
-    Serial.println(lng, 6);
+    Serial.println("POTHOLE,SHALLOW");
     blinkLED(YELLOW_LED_PIN, 2);
     allLEDsOff();
     updateOLED("POTHOLE", "SEVERITY: SHALLOW",
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
-    postDetection("pothole", "shallow", lat, lng);
-    postVehiclePosition(lat, lng);
-    pushToFirebase("pothole", "shallow", lat, lng);
-    pushVehiclePosition(lat, lng);
+    postDetection("pothole", "shallow");
+    pushPendingHazard("pothole", "shallow");
     lastDetectionTime = now;
 
   } else if (delta < SPEEDBREAKER_THRESHOLD && !inCooldown) {
-    Serial.print("SPEEDBREAKER,");
-    Serial.print(lat, 6);
-    Serial.print(",");
-    Serial.println(lng, 6);
+    Serial.println("SPEEDBREAKER");
     blinkLED(BLUE_LED_PIN, 2);
     allLEDsOff();
     updateOLED("SPEEDBREAKER", "RAISED SURFACE",
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: " + String(delta, 1) + "cm");
-    postDetection("speedbreaker", "", lat, lng);
-    postVehiclePosition(lat, lng);
-    pushToFirebase("speedbreaker", "", lat, lng);
-    pushVehiclePosition(lat, lng);
+    postDetection("speedbreaker", "");
+    pushPendingHazard("speedbreaker", "");
     lastDetectionTime = now;
 
   } else {
