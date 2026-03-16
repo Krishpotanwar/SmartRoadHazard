@@ -1,0 +1,391 @@
+/* ============================================================
+   Smart Road Hazard Detection System — Dashboard Stylesheet
+   Dark professional theme, desktop-first (1024px+)
+   ============================================================ */
+
+/* --- Reset & Base ------------------------------------------ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden; /* No page scroll — full viewport layout */
+  font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  background: #0f0f1a;
+  color: #e0e0e0;
+}
+
+/* --- Root Layout ------------------------------------------- */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* --- Header Bar -------------------------------------------- */
+#header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1a1a2e;
+  padding: 0 24px;
+  height: 56px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #2a2a4e;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+#header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+#header-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e0e0e0;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+#header-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 255, 136, 0.08);
+  border: 1px solid rgba(0, 255, 136, 0.25);
+  border-radius: 20px;
+  padding: 4px 12px;
+}
+
+/* Pulsing green dot — live indicator */
+.live-dot {
+  width: 9px;
+  height: 9px;
+  background: #00ff88;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.live-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #00ff88;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#header-subtitle {
+  font-size: 0.82rem;
+  color: #8888aa;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
+/* --- Main Content Area ------------------------------------- */
+#main {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0; /* allow flex children to shrink below content size */
+  overflow: hidden;
+}
+
+/* --- Left Sidebar ------------------------------------------ */
+#sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: #16213e;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-right: 1px solid #1e2d4e;
+  flex-shrink: 0;
+}
+
+/* Scrollbar styling for sidebar */
+#sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+#sidebar::-webkit-scrollbar-track {
+  background: #16213e;
+}
+#sidebar::-webkit-scrollbar-thumb {
+  background: #2a3d6e;
+  border-radius: 4px;
+}
+
+/* --- Section Headings -------------------------------------- */
+.section-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5566aa;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1e2d4e;
+}
+
+/* --- Stats Grid -------------------------------------------- */
+#stats-section {
+  /* wrapper for heading + grid */
+}
+
+#stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat-card {
+  background: #1a2744;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border: 1px solid #233060;
+  transition: border-color 0.2s;
+}
+
+.stat-card:hover {
+  border-color: #3a4e88;
+}
+
+.stat-number {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #e0e0e0;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #7788bb;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Accent colors for individual stat numbers */
+#stat-total   { color: #e0e0e0; }
+#stat-verified { color: #00ff88; }
+#stat-potholes { color: #e94560; }
+#stat-speedbreakers { color: #3498db; }
+
+/* --- Legend Section ---------------------------------------- */
+#legend-section {
+  /* wrapper */
+}
+
+.legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legend-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(0,0,0,0.4);
+}
+
+.legend-text {
+  font-size: 0.82rem;
+  color: #c0c8e0;
+  font-weight: 400;
+}
+
+.legend-circle.deep         { background: #e74c3c; }
+.legend-circle.medium       { background: #e67e22; }
+.legend-circle.shallow      { background: #f1c40f; }
+.legend-circle.speedbreaker { background: #3498db; }
+.legend-circle.unverified   { background: #95a5a6; }
+
+/* --- Reset Button ------------------------------------------ */
+#controls-section {
+  margin-top: auto; /* push to bottom of sidebar */
+}
+
+#reset-btn {
+  width: 100%;
+  padding: 11px 0;
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(192, 57, 43, 0.35);
+}
+
+#reset-btn:hover {
+  background: #e74c3c;
+  box-shadow: 0 4px 16px rgba(231, 76, 60, 0.45);
+}
+
+#reset-btn:active {
+  transform: scale(0.98);
+  background: #a93226;
+}
+
+/* --- Map Area ---------------------------------------------- */
+#map-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  background: #0e1626; /* fallback while Maps loads */
+}
+
+/* Loading overlay shown before Maps initialises */
+#map-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0e1626;
+  color: #5566aa;
+  font-size: 0.9rem;
+  gap: 14px;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+#map-loading.hidden {
+  opacity: 0;
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #1d2c4d;
+  border-top-color: #3498db;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Alert Bar (Hazard Shadow Alert) ----------------------- */
+#alert-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: #e67e22;
+  color: #fff;
+  display: none; /* hidden by default — shown via JS */
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  z-index: 200;
+  box-shadow: 0 -3px 18px rgba(230, 126, 34, 0.55);
+  animation: slideUp 0.3s ease;
+}
+
+#alert-bar.visible {
+  display: flex;
+}
+
+#alert-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alert-icon {
+  font-size: 1.2rem;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* --- Status Bar (connection indicator in sidebar) ---------- */
+#connection-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #1a2744;
+  font-size: 0.74rem;
+  color: #7788bb;
+  border: 1px solid #233060;
+}
+
+#connection-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #95a5a6;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+#connection-status.connected .status-dot {
+  background: #00ff88;
+}
+
+#connection-status.error .status-dot {
+  background: #e74c3c;
+}
+
+#connection-status .status-text {
+  flex: 1;
+}
+
+/* --- Last Updated Timestamp -------------------------------- */
+#last-updated {
+  font-size: 0.68rem;
+  color: #4455880;
+  text-align: center;
+  color: #445588;
+  margin-top: -10px;
+}
+
+/* --- Scrollbar (global fallback) --------------------------- */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0f0f1a; }
+::-webkit-scrollbar-thumb { background: #2a3a6a; border-radius: 3px; }

@@ -1,0 +1,6 @@
+# Wokwi Library Manager — paste this list into Library Manager in Wokwi
+# OR the VS Code extension reads this automatically
+
+Adafruit SSD1306
+Adafruit GFX Library
+Adafruit BusIO

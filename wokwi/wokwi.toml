@@ -1,0 +1,6 @@
+# Wokwi project config — used by Wokwi VS Code extension
+# Install "Wokwi for VS Code" from the VS Code marketplace, then press F1 → "Wokwi: Start Simulator"
+
+[wokwi]
+version = 1
+firmware = "sketch.ino"

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Smart Road Hazard Detection System — Live map dashboard for Nagpur" />
+  <title>Smart Road Hazard Detection System</title>
+
+  <!-- Leaflet CSS — free map library, no API key needed -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ROOT APP WRAPPER -->
+<div id="app">
+
+  <!-- HEADER BAR -->
+  <header id="header">
+    <div id="header-left">
+      <span id="header-title">🚗 Smart Road Hazard Detection System</span>
+      <div id="header-live">
+        <span class="live-dot"></span>
+        <span class="live-label">Live</span>
+      </div>
+    </div>
+    <div id="header-subtitle">📍 Nagpur, Maharashtra</div>
+  </header>
+
+  <!-- MAIN AREA: Sidebar + Map -->
+  <main id="main">
+
+    <!-- LEFT SIDEBAR -->
+    <aside id="sidebar">
+
+      <div id="connection-status">● Connecting…</div>
+
+      <!-- Stats -->
+      <section id="stats-section">
+        <h2 class="section-heading">Live Statistics</h2>
+        <div id="stats-grid">
+          <div class="stat-card">
+            <span class="stat-number" id="stat-total">0</span>
+            <span class="stat-label">Total</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="stat-verified">0</span>
+            <span class="stat-label">Verified</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="stat-potholes">0</span>
+            <span class="stat-label">Potholes</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="stat-speedbreakers">0</span>
+            <span class="stat-label">Speedbreakers</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Legend -->
+      <section id="legend-section">
+        <h2 class="section-heading">Map Legend</h2>
+        <ul class="legend-list">
+          <li class="legend-item"><span class="legend-circle deep"></span><span class="legend-text">Deep Pothole (verified)</span></li>
+          <li class="legend-item"><span class="legend-circle medium"></span><span class="legend-text">Medium Pothole (verified)</span></li>
+          <li class="legend-item"><span class="legend-circle shallow"></span><span class="legend-text">Shallow Pothole (verified)</span></li>
+          <li class="legend-item"><span class="legend-circle speedbreaker"></span><span class="legend-text">Speedbreaker (verified)</span></li>
+          <li class="legend-item"><span class="legend-circle unverified"></span><span class="legend-text">Unverified / Pending</span></li>
+        </ul>
+      </section>
+
+      <p id="last-updated">Waiting for data…</p>
+
+      <!-- Controls -->
+      <section id="controls-section">
+        <h2 class="section-heading">Controls</h2>
+        <button id="reset-btn" onclick="resetHazards()">🗑 Reset All Hazards</button>
+      </section>
+
+    </aside>
+
+    <!-- MAP AREA -->
+    <div id="map-container">
+      <div id="map-loading">
+        <div class="spinner"></div>
+        <span>Loading map…</span>
+      </div>
+      <!-- Leaflet renders into this div -->
+      <div id="map"></div>
+    </div>
+
+  </main>
+
+</div>
+
+<!-- ALERT BAR (bottom, fixed) -->
+<div id="alert-bar" role="alert">
+  <span id="alert-message"></span>
+</div>
+
+<!-- Leaflet JS — free, no API key -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Our map logic -->
+<script src="map.js"></script>
+
+</body>
+</html>

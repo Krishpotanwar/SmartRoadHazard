@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.env
+venv/
+.venv/
+
+# Database (auto-created, do not commit)
+backend/hazards.db
+*.db
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Node (if any tooling added later)
+node_modules/
+
+# Logs
+*.log

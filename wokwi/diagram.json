@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "author": "Krish Potanwar",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-hc-sr04", "id": "hcsr04", "top": -120, "left": -180, "attrs": { "distance": "20" } },
+    { "type": "board-ssd1306", "id": "oled1", "top": -150, "left": 120, "attrs": { "i2cAddress": "0x3c" } },
+    { "type": "wokwi-led", "id": "led1", "top": 140, "left": -120, "attrs": { "color": "red" } },
+    { "type": "wokwi-led", "id": "led2", "top": 140, "left": -60, "attrs": { "color": "yellow" } },
+    { "type": "wokwi-led", "id": "led3", "top": 140, "left": 0, "attrs": { "color": "blue" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": 190, "left": -120, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 190, "left": -60, "rotate": 90, "attrs": { "value": "220" } },
+    { "type": "wokwi-resistor", "id": "r3", "top": 190, "left": 0, "rotate": 90, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    ["esp:5V",   "hcsr04:VCC",  "red",    []],
+    ["esp:GND.1","hcsr04:GND",  "black",  []],
+    ["esp:D5",   "hcsr04:TRIG", "green",  []],
+    ["esp:D18",  "hcsr04:ECHO", "yellow", []],
+    ["esp:3V3",  "oled1:VCC",   "red",    []],
+    ["esp:GND.2","oled1:GND",   "black",  []],
+    ["esp:D21",  "oled1:SDA",   "blue",   []],
+    ["esp:D22",  "oled1:SCL",   "purple", []],
+    ["esp:D15",  "r1:1",        "orange", []],
+    ["r1:2",     "led1:A",      "orange", []],
+    ["led1:K",   "esp:GND.1",   "black",  []],
+    ["esp:D2",   "r2:1",        "yellow", []],
+    ["r2:2",     "led2:A",      "yellow", []],
+    ["led2:K",   "esp:GND.2",   "black",  []],
+    ["esp:D4",   "r3:1",        "blue",   []],
+    ["r3:2",     "led3:A",      "blue",   []],
+    ["led3:K",   "esp:GND.3",   "black",  []]
+  ]
+}
