@@ -93,22 +93,25 @@ void postDetection(String type, String severity) {
 }
 
 // ── Firebase REST API ─────────────────────────────────────────────
-// PUT a pending hazard to Firebase RTDB — no GPS coordinates.
-// The browser (map.js) watches /pending_hazards, stamps its real GPS,
-// writes to /hazards, then deletes the pending entry.
-void pushPendingHazard(String type, String severity) {
+// PUT hazard directly to /hazards/ with lat=0, lng=0.
+// The browser (map.js) watches /hazards and patches any lat=0 entry
+// with the real device GPS coordinates.
+void pushToFirebase(String type, String severity) {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
-  // Use millis() as unique key under /pending_hazards/
-  String url = "https://" + String(FIREBASE_HOST) + "/pending_hazards/" + String(millis()) + ".json";
+  // Use millis() as unique key under /hazards/
+  String url = "https://" + String(FIREBASE_HOST) + "/hazards/" + String(millis()) + ".json";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
   String sevField = (severity == "") ? "null" : ("\"" + severity + "\"");
   String body = "{\"type\":\"" + type + "\","
                 "\"severity\":" + sevField + ","
-                "\"timestamp\":" + String(millis() / 1000) + ","
-                "\"status\":\"pending\"}";
+                "\"lat\":0.0,"
+                "\"lng\":0.0,"
+                "\"verified\":false,"
+                "\"detection_count\":1,"
+                "\"timestamp\":" + String(millis() / 1000) + "}";
   int code = http.PUT(body);
   Serial.println("Firebase PUT → HTTP " + String(code));
   http.end();
@@ -242,7 +245,7 @@ void loop() {
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
     postDetection("pothole", "deep");       // Koyeb (lat=0, browser adds GPS)
-    pushPendingHazard("pothole", "deep");   // Firebase (browser stamps GPS)
+    pushToFirebase("pothole", "deep");   // Firebase (browser stamps GPS)
     lastDetectionTime = now;
 
   } else if (delta > MEDIUM_THRESHOLD && !inCooldown) {
@@ -253,7 +256,7 @@ void loop() {
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
     postDetection("pothole", "medium");
-    pushPendingHazard("pothole", "medium");
+    pushToFirebase("pothole", "medium");
     lastDetectionTime = now;
 
   } else if (delta > SHALLOW_THRESHOLD && !inCooldown) {
@@ -264,7 +267,7 @@ void loop() {
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: +" + String(delta, 1) + "cm");
     postDetection("pothole", "shallow");
-    pushPendingHazard("pothole", "shallow");
+    pushToFirebase("pothole", "shallow");
     lastDetectionTime = now;
 
   } else if (delta < SPEEDBREAKER_THRESHOLD && !inCooldown) {
@@ -275,7 +278,7 @@ void loop() {
                "Dist: " + String(currentDistance, 1) + "cm",
                "Delta: " + String(delta, 1) + "cm");
     postDetection("speedbreaker", "");
-    pushPendingHazard("speedbreaker", "");
+    pushToFirebase("speedbreaker", "");
     lastDetectionTime = now;
 
   } else {

@@ -6,8 +6,7 @@
  * MODE = 'local'    → polls Flask at localhost:5001 (simulator demo)
  */
 
-// ── Firebase config — replace placeholders after Firebase setup ──
-// See FIREBASE_SETUP.md for step-by-step instructions
+// ── Firebase config ───────────────────────────────────────────────
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyBg9oGwgQGzD5UZCOyBOjU2hFFEPUX1-0A",
   authDomain:        "smartroadhazard.firebaseapp.com",
@@ -19,16 +18,13 @@ const FIREBASE_CONFIG = {
   measurementId:     "G-XDTZ5V4V0P",
 };
 
-// Change to 'local' when running the offline simulator demo
 const MODE = 'firebase';
 
 // Flask backend URL (used when MODE = 'local')
-// Replace YOUR-RENDER-APP with your actual Render domain after deployment
-// render.com — free, no credit card required
 const API_BASE = 'https://smartroadhazard.onrender.com';
 const POLL_INTERVAL_MS = 2000;
 
-// ── State ────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────
 const markers = {};
 const knownHazardIds = new Set();
 
@@ -37,12 +33,11 @@ let vehicleMarker;
 let trailLine;
 const vehicleTrail = [];
 
-// GPS state — real device location supplied by the browser
-let currentGps    = null;   // {lat, lng, accuracy} — null until first fix
-let gpsReady      = false;  // true after first valid position received
-const pendingQueue = [];     // pending_hazard events that arrived before GPS was ready
+// GPS — real device location from browser
+let currentGps = null;   // {lat, lng, accuracy}
+let gpsReady   = false;
 
-// ── Marker colours per severity / type ───────────────────────────
+// ── Marker colours ────────────────────────────────────────────────
 const COLORS = {
   deep:         '#e74c3c',
   medium:       '#e67e22',
@@ -57,7 +52,7 @@ function resolveColor(hazard) {
   return COLORS[hazard.severity] || COLORS.unverified;
 }
 
-// ── SVG circle icon for hazard markers ───────────────────────────
+// ── SVG circle icon ───────────────────────────────────────────────
 function makeIcon(color) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
     <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
@@ -79,7 +74,6 @@ function initMap() {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
-  // Vehicle emoji marker
   const vehicleIcon = L.divIcon({
     className: '',
     html: '<div style="font-size:26px;transform:translate(-50%,-50%)">🚗</div>',
@@ -92,7 +86,6 @@ function initMap() {
     zIndexOffset: 1000,
   }).addTo(map);
 
-  // Green dashed trail
   trailLine = L.polyline([], {
     color: '#00ff88',
     weight: 2,
@@ -103,7 +96,6 @@ function initMap() {
   const overlay = document.getElementById('map-loading');
   if (overlay) overlay.style.display = 'none';
 
-  // Branch on mode — Firebase uses real-time listeners, local uses polling
   if (MODE === 'firebase') {
     initFirebase();
     updateModeIndicator('🔥 Firebase Mode');
@@ -113,73 +105,76 @@ function initMap() {
   }
 }
 
-// ── Firebase mode ────────────────────────────────────────────────
-// Initialise Firebase app and attach real-time listeners
+// ── Firebase mode ─────────────────────────────────────────────────
 function initFirebase() {
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
     const db = firebase.database();
 
-    // Start real GPS — browser supplies coordinates; ESP32 no longer sends them
+    // Start GPS — browser supplies real coordinates
     startGPS(db);
 
-    // Real-time hazard listener — fires on every new/changed hazard
+    // Real-time hazard listener
     db.ref('/hazards').on('value', (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return;
-      // Attach Firebase key as 'id' so addOrUpdateMarker can track duplicates
-      const hazards = Object.entries(data).map(([key, val]) => ({
-        ...val,
-        id: key,
-      }));
-      hazards.forEach(h => addOrUpdateMarker(h));
-      updateStats(hazards);
+      // Mark connected regardless of whether data exists
       setConnectionStatus(true);
       const ts = document.getElementById('last-updated');
       if (ts) ts.textContent = new Date().toLocaleTimeString();
+
+      const data = snapshot.val();
+      if (!data) { updateStats([]); return; }
+
+      const hazards = Object.entries(data).map(([key, val]) => ({ ...val, id: key }));
+
+      // Patch any lat=0 entries with real GPS if available
+      if (gpsReady && currentGps) {
+        hazards.forEach(h => {
+          if (Number(h.lat) === 0 && Number(h.lng) === 0) {
+            db.ref('/hazards/' + h.id).update({
+              lat: currentGps.lat,
+              lng: currentGps.lng,
+              accuracy: currentGps.accuracy,
+              gps_source: 'browser',
+            });
+            // Update locally so marker renders at correct position immediately
+            h.lat = currentGps.lat;
+            h.lng = currentGps.lng;
+          }
+        });
+      }
+
+      // Only render hazards that have valid coordinates
+      const mappable = hazards.filter(h => Number(h.lat) !== 0 || Number(h.lng) !== 0);
+      mappable.forEach(h => addOrUpdateMarker(h));
+      updateStats(hazards);
     });
 
-    // Real-time vehicle position listener — now comes from browser GPS (via onGpsSuccess)
+    // Vehicle position listener
     db.ref('/vehicle/position').on('value', (snapshot) => {
       const v = snapshot.val();
       if (!v) return;
       updateVehicleMarker(v.lat, v.lng, v.speed);
     });
 
-    // Listen for pending hazards pushed by the ESP32 (no GPS coordinates yet)
-    // Browser stamps current GPS location and moves them to /hazards
-    db.ref('/pending_hazards').on('child_added', (snapshot) => {
-      const key   = snapshot.key;
-      const event = snapshot.val();
-      if (!event) return;
-      if (gpsReady) {
-        resolveAndPostHazard(db, key, event);
-      } else {
-        pendingQueue.push({ key, event });
-      }
-    });
-
   } catch (err) {
     console.error('Firebase init error:', err);
     setConnectionStatus(false);
-    // Fallback to local polling if Firebase fails
     startPolling();
   }
 }
 
 // ── Real Device GPS ───────────────────────────────────────────────
-// Requests the browser's GPS and keeps a live position watch.
-// The vehicle marker moves to the real location; pending hazards
-// from the ESP32 get stamped with these coordinates.
 function startGPS(db) {
   if (!navigator.geolocation) {
     updateGpsStatus('unavailable');
+    // Fallback so demo works without GPS
+    setGpsFallback(db);
     return;
   }
   updateGpsStatus('requesting');
   navigator.geolocation.watchPosition(
     (position) => onGpsSuccess(db, position),
-    onGpsError,
+    (err) => onGpsError(db, err),
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
   );
 }
@@ -191,13 +186,12 @@ function onGpsSuccess(db, position) {
   if (!gpsReady) {
     gpsReady = true;
     updateGpsStatus('active');
-    processPendingQueue(db);
   }
 
   // Move vehicle marker to real location
   updateVehicleMarker(lat, lng, null);
 
-  // Publish real position to Firebase so other clients see the vehicle
+  // Publish real position to Firebase
   db.ref('/vehicle/position').set({
     lat, lng, accuracy,
     ts: Math.floor(Date.now() / 1000),
@@ -205,58 +199,44 @@ function onGpsSuccess(db, position) {
   });
 }
 
-function onGpsError(err) {
+function onGpsError(db, err) {
   if (err.code === err.PERMISSION_DENIED) {
     updateGpsStatus('denied');
-    showAlert('GPS permission denied — hazard pins will use approximate location.');
   } else {
-    // Non-fatal: watchPosition keeps trying
     updateGpsStatus('unavailable');
   }
+  // Fallback to Nagpur centre so hazard pins still appear during demo
+  if (!gpsReady) {
+    setGpsFallback(db);
+  }
+}
+
+// Use Nagpur centre as fallback GPS so demo works even without device GPS
+function setGpsFallback(db) {
+  currentGps = { lat: 21.1458, lng: 79.0882, accuracy: 999 };
+  gpsReady = true;
+  db.ref('/vehicle/position').set({
+    lat: 21.1458, lng: 79.0882, accuracy: 999,
+    ts: Math.floor(Date.now() / 1000),
+    source: 'fallback',
+  });
 }
 
 function updateGpsStatus(state) {
   const el = document.getElementById('gps-status');
   if (!el) return;
-  const map = {
-    requesting:  { text: '📡 GPS initialising…',   color: '#f39c12' },
-    active:      { text: '📍 GPS Active',           color: '#00ff88' },
-    denied:      { text: '🚫 GPS Denied',           color: '#e74c3c' },
-    unavailable: { text: '⚠️ GPS Unavailable',      color: '#e67e22' },
+  const states = {
+    requesting:  { text: '📡 GPS initialising…', color: '#f39c12' },
+    active:      { text: '📍 GPS Active',         color: '#00ff88' },
+    denied:      { text: '🚫 GPS Denied (Nagpur fallback)', color: '#e67e22' },
+    unavailable: { text: '⚠️ GPS Unavailable (Nagpur fallback)', color: '#e67e22' },
   };
-  const s = map[state] || map.requesting;
-  el.textContent  = s.text;
-  el.style.color  = s.color;
+  const s = states[state] || states.requesting;
+  el.textContent = s.text;
+  el.style.color = s.color;
 }
 
-// Drain any pending_hazard events that arrived before GPS was ready
-function processPendingQueue(db) {
-  while (pendingQueue.length > 0) {
-    const { key, event } = pendingQueue.shift();
-    resolveAndPostHazard(db, key, event);
-  }
-}
-
-// Stamp current GPS onto a pending hazard, write to /hazards, delete from /pending_hazards
-function resolveAndPostHazard(db, key, event) {
-  if (!currentGps) return; // Should not happen after gpsReady, but guard anyway
-  const { lat, lng, accuracy } = currentGps;
-  db.ref('/hazards/' + key).set({
-    type:            event.type,
-    severity:        event.severity || null,
-    lat,
-    lng,
-    accuracy,
-    verified:        false,
-    detection_count: 1,
-    timestamp:       event.timestamp || Math.floor(Date.now() / 1000),
-    gps_source:      'browser',
-  })
-  .then(() => db.ref('/pending_hazards/' + key).remove())
-  .catch(err => console.error('resolveAndPostHazard failed for key', key, err));
-}
-
-// ── Shared vehicle marker updater (used by both modes) ───────────
+// ── Shared vehicle marker updater ─────────────────────────────────
 function updateVehicleMarker(lat, lng, speed) {
   if (!vehicleMarker) return;
   const pos = [lat, lng];
@@ -272,7 +252,7 @@ function updateVehicleMarker(lat, lng, speed) {
   trailLine.setLatLngs(vehicleTrail);
 }
 
-// ── Local mode — poll Flask API ──────────────────────────────────
+// ── Local mode — poll Flask API ───────────────────────────────────
 async function fetchVehiclePosition() {
   try {
     const res = await fetch(`${API_BASE}/api/vehicle`);
@@ -305,13 +285,14 @@ async function fetchAndUpdateHazards() {
   }
 }
 
-// ── Marker management (shared by both modes) ─────────────────────
+// ── Marker management ─────────────────────────────────────────────
 function addOrUpdateMarker(hazard) {
   const color = resolveColor(hazard);
   const icon  = makeIcon(color);
 
   if (markers[hazard.id]) {
     markers[hazard.id].setIcon(icon);
+    markers[hazard.id].setLatLng([hazard.lat, hazard.lng]);
     return;
   }
 
@@ -330,7 +311,7 @@ function addOrUpdateMarker(hazard) {
   knownHazardIds.add(hazard.id);
 }
 
-// ── Popup HTML — handles both Flask (first_detected) and Firebase (timestamp) fields ──
+// ── Popup HTML ────────────────────────────────────────────────────
 function buildPopup(h) {
   const type     = (h.type || '').toUpperCase();
   const severity = h.severity ? h.severity.toUpperCase() : '—';
