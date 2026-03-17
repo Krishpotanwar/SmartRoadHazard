@@ -388,4 +388,23 @@ async function resetHazards() {
   }
 }
 
+// ── Simulate a detection (demo / backup when Wokwi HTTP fails) ────
+// Writes directly to Firebase at current GPS location
+function simulateDetection(type, severity) {
+  if (MODE !== 'firebase') { alert('Only works in Firebase mode'); return; }
+  const db  = firebase.database();
+  const key = Date.now();
+  const lat = currentGps ? currentGps.lat : 21.1458;
+  const lng = currentGps ? currentGps.lng : 79.0882;
+  db.ref('/hazards/' + key).set({
+    type,
+    severity: severity || null,
+    lat, lng,
+    verified: false,
+    detection_count: 1,
+    timestamp: Math.floor(key / 1000),
+    gps_source: 'simulated',
+  });
+}
+
 window.addEventListener('load', initMap);
