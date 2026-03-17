@@ -389,5 +389,90 @@ html, body {
 ::-webkit-scrollbar-track { background: #0f0f1a; }
 ::-webkit-scrollbar-thumb { background: #2a3a6a; border-radius: 3px; }
 
-/* --- Vehicle popup ----------------------------------------- */
-.vehicle-popup { font-family: sans-serif; min-width: 160px; }
+/* --- Hazard marker dot ------------------------------------- */
+.hzd-dot {
+  border-radius: 50%;
+  border: 2.5px solid white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+
+.hzd-dot:hover {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.6), 0 4px 14px rgba(0,0,0,0.5);
+}
+
+/* Selected marker — larger with glowing ring (set via inline style too) */
+.hzd-selected {
+  transform: scale(1.0); /* size already handled by makeIcon(size=30) */
+  animation: marker-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes marker-pulse {
+  0%, 100% { filter: brightness(1); }
+  50%       { filter: brightness(1.35); }
+}
+
+/* Dimmed non-selected markers */
+.leaflet-marker-icon.hzd-dimmed .hzd-dot,
+.hzd-dimmed .hzd-dot {
+  opacity: 0.35;
+}
+
+/* Leaflet wraps divIcon in .leaflet-marker-icon — target child */
+.leaflet-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* --- Hover tooltip ----------------------------------------- */
+.hazard-tooltip {
+  background: #1a1a2e !important;
+  border: 1px solid #3a4e88 !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important;
+  font-family: 'Segoe UI', 'Inter', sans-serif !important;
+  pointer-events: none;
+}
+
+.hazard-tooltip::before {
+  border-top-color: #3a4e88 !important;
+}
+
+.hazard-tooltip .tt-type {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e0e0e0;
+  margin-bottom: 3px;
+}
+
+.hazard-tooltip .tt-status {
+  font-size: 0.75rem;
+  color: #8899cc;
+}
+
+.hazard-tooltip .tt-time {
+  font-size: 0.68rem;
+  color: #556688;
+  margin-top: 2px;
+}
+
+/* --- Simulate buttons -------------------------------------- */
+#sim-btn, #sim-spd-btn {
+  width: 100%;
+  padding: 10px 0;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+
+#sim-btn:hover, #sim-spd-btn:hover { filter: brightness(1.2); }
+#sim-btn:active, #sim-spd-btn:active { transform: scale(0.97); }

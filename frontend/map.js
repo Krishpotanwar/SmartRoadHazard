@@ -25,16 +25,15 @@ const API_BASE = 'https://smartroadhazard.onrender.com';
 const POLL_INTERVAL_MS = 2000;
 
 // ── State ─────────────────────────────────────────────────────────
-const markers = {};
+const markers      = {};       // id → Leaflet marker
+const markerColors = {};       // id → hex color string (for deselect restore)
 const knownHazardIds = new Set();
+let   selectedId   = null;     // currently highlighted marker id
 
 let map;
-let vehicleMarker;
-let trailLine;
-const vehicleTrail = [];
 
 // GPS — real device location from browser
-let currentGps = null;   // {lat, lng, accuracy}
+let currentGps = null;
 let gpsReady   = false;
 
 // ── Marker colours ────────────────────────────────────────────────
@@ -52,16 +51,20 @@ function resolveColor(hazard) {
   return COLORS[hazard.severity] || COLORS.unverified;
 }
 
-// ── SVG circle icon ───────────────────────────────────────────────
-function makeIcon(color) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-    <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2.5"/>
-  </svg>`;
-  return L.icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(svg),
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -14],
+// ── Div-based icon (supports CSS hover + selected state) ──────────
+function makeIcon(color, selected = false) {
+  const size = selected ? 30 : 22;
+  const half = size / 2;
+  return L.divIcon({
+    className: '',
+    html: `<div class="hzd-dot${selected ? ' hzd-selected' : ''}"
+      style="background:${color};width:${size}px;height:${size}px;
+             margin:${-half}px 0 0 ${-half}px;
+             ${selected ? `box-shadow:0 0 0 4px white,0 0 0 7px ${color},0 0 22px ${color}` : ''}">
+    </div>`,
+    iconSize:    [size, size],
+    iconAnchor:  [half, half],
+    popupAnchor: [0, -(half + 8)],
   });
 }
 
@@ -74,24 +77,13 @@ function initMap() {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
-  const vehicleIcon = L.divIcon({
-    className: '',
-    html: '<div style="font-size:26px;transform:translate(-50%,-50%)">🚗</div>',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+  // Click on empty map → deselect current marker
+  map.on('click', (e) => {
+    if (e.originalEvent.target === map.getContainer().querySelector('canvas') ||
+        e.originalEvent.target.classList.contains('leaflet-tile')) {
+      deselectMarker();
+    }
   });
-
-  vehicleMarker = L.marker([21.145800, 79.088200], {
-    icon: vehicleIcon,
-    zIndexOffset: 1000,
-  }).addTo(map);
-
-  trailLine = L.polyline([], {
-    color: '#00ff88',
-    weight: 2,
-    opacity: 0.5,
-    dashArray: '5, 8',
-  }).addTo(map);
 
   const overlay = document.getElementById('map-loading');
   if (overlay) overlay.style.display = 'none';
@@ -111,12 +103,9 @@ function initFirebase() {
     firebase.initializeApp(FIREBASE_CONFIG);
     const db = firebase.database();
 
-    // Start GPS — browser supplies real coordinates
     startGPS(db);
 
-    // Real-time hazard listener
     db.ref('/hazards').on('value', (snapshot) => {
-      // Mark connected regardless of whether data exists
       setConnectionStatus(true);
       const ts = document.getElementById('last-updated');
       if (ts) ts.textContent = new Date().toLocaleTimeString();
@@ -126,7 +115,7 @@ function initFirebase() {
 
       const hazards = Object.entries(data).map(([key, val]) => ({ ...val, id: key }));
 
-      // Patch any lat=0 entries with real GPS if available
+      // Patch lat=0 entries with real GPS
       if (gpsReady && currentGps) {
         hazards.forEach(h => {
           if (Number(h.lat) === 0 && Number(h.lng) === 0) {
@@ -136,24 +125,15 @@ function initFirebase() {
               accuracy: currentGps.accuracy,
               gps_source: 'browser',
             });
-            // Update locally so marker renders at correct position immediately
             h.lat = currentGps.lat;
             h.lng = currentGps.lng;
           }
         });
       }
 
-      // Only render hazards that have valid coordinates
       const mappable = hazards.filter(h => Number(h.lat) !== 0 || Number(h.lng) !== 0);
       mappable.forEach(h => addOrUpdateMarker(h));
       updateStats(hazards);
-    });
-
-    // Vehicle position listener
-    db.ref('/vehicle/position').on('value', (snapshot) => {
-      const v = snapshot.val();
-      if (!v) return;
-      updateVehicleMarker(v.lat, v.lng, v.speed);
     });
 
   } catch (err) {
@@ -167,13 +147,12 @@ function initFirebase() {
 function startGPS(db) {
   if (!navigator.geolocation) {
     updateGpsStatus('unavailable');
-    // Fallback so demo works without GPS
     setGpsFallback(db);
     return;
   }
   updateGpsStatus('requesting');
   navigator.geolocation.watchPosition(
-    (position) => onGpsSuccess(db, position),
+    (pos) => onGpsSuccess(db, pos),
     (err) => onGpsError(db, err),
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
   );
@@ -182,91 +161,41 @@ function startGPS(db) {
 function onGpsSuccess(db, position) {
   const { latitude: lat, longitude: lng, accuracy } = position.coords;
   currentGps = { lat, lng, accuracy };
-
   if (!gpsReady) {
     gpsReady = true;
     updateGpsStatus('active');
   }
-
-  // Move vehicle marker to real location
-  updateVehicleMarker(lat, lng, null);
-
-  // Publish real position to Firebase
-  db.ref('/vehicle/position').set({
-    lat, lng, accuracy,
-    ts: Math.floor(Date.now() / 1000),
-    source: 'browser',
-  });
+  db.ref('/vehicle/position').set({ lat, lng, accuracy, ts: Math.floor(Date.now() / 1000), source: 'browser' });
 }
 
 function onGpsError(db, err) {
-  if (err.code === err.PERMISSION_DENIED) {
-    updateGpsStatus('denied');
-  } else {
-    updateGpsStatus('unavailable');
-  }
-  // Fallback to Nagpur centre so hazard pins still appear during demo
-  if (!gpsReady) {
-    setGpsFallback(db);
-  }
+  updateGpsStatus(err.code === err.PERMISSION_DENIED ? 'denied' : 'unavailable');
+  if (!gpsReady) setGpsFallback(db);
 }
 
-// Use Nagpur centre as fallback GPS so demo works even without device GPS
 function setGpsFallback(db) {
   currentGps = { lat: 21.1458, lng: 79.0882, accuracy: 999 };
-  gpsReady = true;
-  db.ref('/vehicle/position').set({
-    lat: 21.1458, lng: 79.0882, accuracy: 999,
-    ts: Math.floor(Date.now() / 1000),
-    source: 'fallback',
-  });
+  gpsReady   = true;
+  db.ref('/vehicle/position').set({ lat: 21.1458, lng: 79.0882, accuracy: 999, ts: Math.floor(Date.now() / 1000), source: 'fallback' });
 }
 
 function updateGpsStatus(state) {
   const el = document.getElementById('gps-status');
   if (!el) return;
-  const states = {
-    requesting:  { text: '📡 GPS initialising…', color: '#f39c12' },
-    active:      { text: '📍 GPS Active',         color: '#00ff88' },
-    denied:      { text: '🚫 GPS Denied (Nagpur fallback)', color: '#e67e22' },
+  const s = {
+    requesting:  { text: '📡 GPS initialising…',              color: '#f39c12' },
+    active:      { text: '📍 GPS Active',                     color: '#00ff88' },
+    denied:      { text: '🚫 GPS Denied (Nagpur fallback)',   color: '#e67e22' },
     unavailable: { text: '⚠️ GPS Unavailable (Nagpur fallback)', color: '#e67e22' },
-  };
-  const s = states[state] || states.requesting;
+  }[state] || { text: '📡 GPS initialising…', color: '#f39c12' };
   el.textContent = s.text;
   el.style.color = s.color;
 }
 
-// ── Shared vehicle marker updater ─────────────────────────────────
-function updateVehicleMarker(lat, lng, speed) {
-  if (!vehicleMarker) return;
-  const pos = [lat, lng];
-  vehicleMarker.setLatLng(pos);
-  vehicleMarker.bindPopup(
-    `<b>🚗 Vehicle</b><br/>` +
-    `Lat: ${Number(lat).toFixed(5)}<br/>` +
-    `Lng: ${Number(lng).toFixed(5)}<br/>` +
-    `Speed: ${speed || 30} km/h`
-  );
-  vehicleTrail.push(pos);
-  if (vehicleTrail.length > 15) vehicleTrail.shift();
-  trailLine.setLatLngs(vehicleTrail);
-}
-
 // ── Local mode — poll Flask API ───────────────────────────────────
-async function fetchVehiclePosition() {
-  try {
-    const res = await fetch(`${API_BASE}/api/vehicle`);
-    if (!res.ok) return;
-    const v = await res.json();
-    updateVehicleMarker(v.lat, v.lng, v.speed);
-  } catch (e) {}
-}
-
 function startPolling() {
   fetchAndUpdateHazards();
   setInterval(fetchAndUpdateHazards, POLL_INTERVAL_MS);
-  fetchVehiclePosition();
-  setInterval(fetchVehiclePosition, 1000);
 }
 
 async function fetchAndUpdateHazards() {
@@ -288,58 +217,99 @@ async function fetchAndUpdateHazards() {
 // ── Marker management ─────────────────────────────────────────────
 function addOrUpdateMarker(hazard) {
   const color = resolveColor(hazard);
-  const icon  = makeIcon(color);
+  markerColors[hazard.id] = color;
 
   if (markers[hazard.id]) {
-    markers[hazard.id].setIcon(icon);
+    // Update position and icon color (preserve selected state)
     markers[hazard.id].setLatLng([hazard.lat, hazard.lng]);
+    if (selectedId !== hazard.id) {
+      markers[hazard.id].setIcon(makeIcon(color, false));
+    }
+    // Refresh tooltip content
+    markers[hazard.id].setTooltipContent(buildTooltip(hazard));
     return;
   }
 
-  const marker = L.marker([hazard.lat, hazard.lng], { icon })
-    .addTo(map)
-    .bindPopup(buildPopup(hazard));
-  marker.on('click', () => marker.openPopup());
-  markers[hazard.id] = marker;
+  const marker = L.marker([hazard.lat, hazard.lng], { icon: makeIcon(color, false) })
+    .addTo(map);
 
+  // ── Hover tooltip — follows mouse cursor ──
+  marker.bindTooltip(buildTooltip(hazard), {
+    sticky:    true,       // tooltip follows mouse
+    direction: 'top',
+    className: 'hazard-tooltip',
+    offset:    [0, -14],
+  });
+
+  // ── Click — highlight this marker, dim others ──
+  marker.on('click', () => selectMarker(hazard.id));
+
+  markers[hazard.id]  = marker;
+
+  // Hazard shadow alert for new verified severe potholes
   if (hazard.verified && (hazard.severity === 'deep' || hazard.severity === 'medium')) {
     if (!knownHazardIds.has(hazard.id)) {
       showAlert(`⚠️ ${(hazard.severity || '').toUpperCase()} POTHOLE detected near (${Number(hazard.lat).toFixed(4)}, ${Number(hazard.lng).toFixed(4)}) — Hazard Shadow Alert active!`);
     }
   }
-
   knownHazardIds.add(hazard.id);
 }
 
-// ── Popup HTML ────────────────────────────────────────────────────
-function buildPopup(h) {
+function selectMarker(id) {
+  // Restore previous selection
+  if (selectedId && markers[selectedId]) {
+    markers[selectedId].setIcon(makeIcon(markerColors[selectedId], false));
+    markers[selectedId].getElement()?.classList.remove('hzd-dimmed');
+  }
+
+  if (selectedId === id) {
+    // Toggle off — clicking the same marker deselects
+    selectedId = null;
+    // Un-dim all
+    Object.keys(markers).forEach(k => markers[k].getElement()?.classList.remove('hzd-dimmed'));
+    return;
+  }
+
+  selectedId = id;
+  markers[id].setIcon(makeIcon(markerColors[id], true));
+
+  // Dim all other markers
+  Object.keys(markers).forEach(k => {
+    const el = markers[k].getElement();
+    if (!el) return;
+    el.classList.toggle('hzd-dimmed', k !== id);
+  });
+}
+
+function deselectMarker() {
+  if (!selectedId) return;
+  if (markers[selectedId]) {
+    markers[selectedId].setIcon(makeIcon(markerColors[selectedId], false));
+  }
+  Object.keys(markers).forEach(k => markers[k].getElement()?.classList.remove('hzd-dimmed'));
+  selectedId = null;
+}
+
+// ── Tooltip HTML (compact, shown on hover) ────────────────────────
+function buildTooltip(h) {
   const type     = (h.type || '').toUpperCase();
-  const severity = h.severity ? h.severity.toUpperCase() : '—';
-  const status   = h.verified ? '✅ Verified' : `⏳ Pending (${h.detection_count}/3)`;
+  const severity = h.severity ? ` — ${h.severity.toUpperCase()}` : '';
+  const status   = h.verified ? '✅ Verified' : `⏳ ${h.detection_count}/3 reports`;
   const time     = h.first_detected
-    ? new Date(h.first_detected).toLocaleString()
-    : (h.timestamp ? new Date(h.timestamp * 1000).toLocaleString() : 'Unknown');
-  return `
-    <div style="min-width:200px;font-family:sans-serif">
-      <h3 style="margin:0 0 6px;color:#e94560">🚧 ${type}${h.severity ? ' — ' + severity : ''}</h3>
-      <p style="margin:2px 0"><b>Status:</b> ${status}</p>
-      <p style="margin:2px 0"><b>Detections:</b> ${h.detection_count}</p>
-      <p style="margin:2px 0"><b>First seen:</b> ${time}</p>
-      <p style="margin:2px 0"><b>Location:</b> ${Number(h.lat).toFixed(5)}, ${Number(h.lng).toFixed(5)}</p>
-    </div>`;
+    ? new Date(h.first_detected).toLocaleTimeString()
+    : (h.timestamp ? new Date(h.timestamp * 1000).toLocaleTimeString() : '');
+  return `<div class="tt-type">🚧 ${type}${severity}</div>
+          <div class="tt-status">${status}</div>
+          ${time ? `<div class="tt-time">${time}</div>` : ''}`;
 }
 
 // ── Stats panel ───────────────────────────────────────────────────
 function updateStats(hazards) {
-  const total         = hazards.length;
-  const verified      = hazards.filter(h => h.verified).length;
-  const potholes      = hazards.filter(h => h.type === 'pothole').length;
-  const speedbreakers = hazards.filter(h => h.type === 'speedbreaker').length;
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('stat-total',         total);
-  set('stat-verified',      verified);
-  set('stat-potholes',      potholes);
-  set('stat-speedbreakers', speedbreakers);
+  set('stat-total',         hazards.length);
+  set('stat-verified',      hazards.filter(h => h.verified).length);
+  set('stat-potholes',      hazards.filter(h => h.type === 'pothole').length);
+  set('stat-speedbreakers', hazards.filter(h => h.type === 'speedbreaker').length);
 }
 
 // ── Alert bar ─────────────────────────────────────────────────────
@@ -358,7 +328,7 @@ function setConnectionStatus(ok) {
   const el = document.getElementById('connection-status');
   if (!el) return;
   el.textContent = ok ? '● Connected' : '● Disconnected';
-  el.style.color  = ok ? '#00ff88'     : '#e74c3c';
+  el.style.color  = ok ? '#00ff88'    : '#e74c3c';
 }
 
 // ── Mode indicator ────────────────────────────────────────────────
@@ -380,7 +350,9 @@ async function resetHazards() {
     }
     Object.values(markers).forEach(m => map.removeLayer(m));
     Object.keys(markers).forEach(k => delete markers[k]);
+    Object.keys(markerColors).forEach(k => delete markerColors[k]);
     knownHazardIds.clear();
+    selectedId = null;
     updateStats([]);
     alert('All hazards cleared!');
   } catch (err) {
@@ -388,8 +360,7 @@ async function resetHazards() {
   }
 }
 
-// ── Simulate a detection (demo / backup when Wokwi HTTP fails) ────
-// Writes directly to Firebase at current GPS location
+// ── Simulate a detection (demo backup when Wokwi HTTP fails) ──────
 function simulateDetection(type, severity) {
   if (MODE !== 'firebase') { alert('Only works in Firebase mode'); return; }
   const db  = firebase.database();
