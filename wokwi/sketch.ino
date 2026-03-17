@@ -41,7 +41,7 @@ const char* WIFI_PASSWORD = "";
 
 // Render server URL — replace YOUR-RENDER-APP after deployment
 // See DEPLOYMENT.md for instructions (render.com, free, no credit card)
-const char* SERVER_URL  = "https://YOUR-RENDER-APP.onrender.com/api/hazards";
+const char* SERVER_URL  = "https://smartroadhazard.onrender.com/api/hazards";
 
 // Firebase Realtime Database — REST API (no library needed)
 // Rules are open (.read/.write = true) so no auth token required for demo

@@ -25,7 +25,7 @@ const MODE = 'firebase';
 // Flask backend URL (used when MODE = 'local')
 // Replace YOUR-RENDER-APP with your actual Render domain after deployment
 // render.com — free, no credit card required
-const API_BASE = 'https://YOUR-RENDER-APP.onrender.com';
+const API_BASE = 'https://smartroadhazard.onrender.com';
 const POLL_INTERVAL_MS = 2000;
 
 // ── State ────────────────────────────────────────────────────────
