@@ -156,7 +156,7 @@ SmartRoadHazard/
 |------|------|---------------|
 SOUMYA JAISWAL| FRONTEND|RBU-51
 |Krish Potanwar | FULL Stack | RBU-14 |
-| | | |
+|Shubhiksha Bisen|Frontend |RBU-58 |
 
 *(Fill in before submission)*
 
