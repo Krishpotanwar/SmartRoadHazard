@@ -154,6 +154,7 @@ SmartRoadHazard/
 
 | Name | Role | University ID |
 |------|------|---------------|
+SOUMYA JAISWAL| FRONTEND|RBU-51
 | | | |
 | | | |
 
