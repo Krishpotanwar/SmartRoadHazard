@@ -160,7 +160,7 @@ SOUMYA JAISWAL| FRONTEND|RBU-51
 |Harshit Widhwani | Backend | RBU-10|
 |Krish Potanwar | FULL Stack | RBU-14 |
 
-*(Fill in before submission)*
+
 
 ---
 
