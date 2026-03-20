@@ -155,7 +155,7 @@ SmartRoadHazard/
 | Name | Role | University ID |
 |------|------|---------------|
 SOUMYA JAISWAL| FRONTEND|RBU-51
-| | | |
+|Krish Potanwar | FULL Stack | RBU-14 |
 | | | |
 
 *(Fill in before submission)*
