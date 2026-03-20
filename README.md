@@ -155,9 +155,10 @@ SmartRoadHazard/
 | Name | Role | University ID |
 |------|------|---------------|
 SOUMYA JAISWAL| FRONTEND|RBU-51
-|Krish Potanwar | FULL Stack | RBU-14 |
+|Bhavika Valecha | IOT Hardware | RBU - 44 |
 |Shubhiksha Bisen|Frontend |RBU-58 |
 |Harshit Widhwani | Backend | RBU-10|
+|Krish Potanwar | FULL Stack | RBU-14 |
 
 *(Fill in before submission)*
 
